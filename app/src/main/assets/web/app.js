@@ -157,7 +157,7 @@
     $('roomCode').textContent = data.code;
     $('roomTurn').textContent = data.turn;
     $('rulesChip').textContent = data.actions.length + ' ações';
-    $('rulesCount').textContent = data.rule_pages.length + ' páginas fotografadas';
+    $('rulesCount').textContent = data.rule_pages.length + ' arquivos do manual carregados';
     $('privateCount').textContent = data.private_card_count;
     $('turnChip').textContent = data.proposal ? 'Revisão pendente' : 'Aguardando jogada';
     if (!formIsBeingEdited('rulesForm')) fillRules(data.rules_draft || data);
@@ -292,11 +292,11 @@
 
   $('uploadRules').addEventListener('click', run(async () => {
     const files = [...$('rulePhotos').files];
-    if (!files.length) throw new Error('Selecione fotografias das páginas do manual.');
+    if (!files.length) throw new Error('Selecione o PDF do manual ou fotografias das páginas.');
     const form = new FormData(); files.forEach(file => form.append('files', file));
     const data = await request(api('/rules/pages'), {method:'POST', body:form});
     $('rulePhotos').value = '';
-    toast(`${data.pages_count} páginas carregadas nesta sala.`);
+    toast(`${data.pages_count} arquivos do manual carregados nesta sala.`);
   }));
   $('interpretRules').addEventListener('click', run(async () => {
     const draft = await request(api('/rules/interpret'), {method:'POST'});

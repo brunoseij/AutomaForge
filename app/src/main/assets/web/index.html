@@ -53,11 +53,11 @@
             <article class="panel">
               <div class="section-head"><div><span class="eyebrow">01 · PREPARAÇÃO</span><h2>Configurar regras</h2></div><span class="chip" id="rulesChip">Sem regras</span></div>
               <div class="divider"></div>
-              <label for="rulePhotos">Fotografias do manual</label>
-              <input type="file" id="rulePhotos" accept="image/*" capture="environment" multiple>
-              <p class="hint">Envie fotos legíveis. Você pode adicionar páginas em etapas.</p>
-              <div class="button-row"><button id="uploadRules" class="secondary">Adicionar fotos</button><button id="interpretRules" class="primary">Interpretar com IA</button></div>
-              <p class="tiny muted" id="rulesCount">0 páginas carregadas</p>
+              <label for="rulePhotos">Livro de regras (PDF ou fotografias)</label>
+              <input type="file" id="rulePhotos" accept="application/pdf,.pdf,image/*" multiple>
+              <p class="hint">Envie o PDF do manual ou fotos legíveis. Você pode adicionar arquivos em etapas.</p>
+              <div class="button-row"><button id="uploadRules" class="secondary">Adicionar arquivos</button><button id="interpretRules" class="primary">Interpretar com IA</button></div>
+              <p class="tiny muted" id="rulesCount">0 arquivos carregados</p>
               <div id="draftBox" class="notice hidden"></div>
               <details id="manualRulesDetails" open>
                 <summary>Revisar ou escrever as regras</summary>

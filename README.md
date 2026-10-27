@@ -26,7 +26,7 @@ Controlador Android (instale o APK)
 - Os satélites se conectam digitando o endereço IPv4 do controlador no primeiro painel do APK.
 - Uma única interface web disponibiliza controlador, câmera do tabuleiro e leitor privado.
 - Salas de oito caracteres e atualização de estado quase imediata por WebSocket.
-- Upload de até 30 fotografias das regras, interpretação de regras em lotes de até 12 fotos por IA (opcional), edição e confirmação humana.
+- Upload de até 30 arquivos do manual (PDF ou fotografias), interpretação em lotes de até 12 arquivos por IA (opcional), edição e confirmação humana.
 - Regras, ações, fase, turno, variáveis, notas e histórico salvos em JSON no armazenamento privado Android.
 - **Câmera nativa secundária** com prévia e captura do tabuleiro a cada 5 segundos, sem mover o tripé.
 - **Leitor privado nativo** com botão de captura individual: imagem e interpretação permanecem fora do estado público. As descrições das cartas residem somente na RAM da instância do servidor e são perdidas quando o processo morre.
@@ -70,7 +70,7 @@ O workflow está em `.github/workflows/android-apk.yml`. O APK de debug usa assi
 2. Crie a sala e compartilhe seu código com oito caracteres.
 3. No segundo celular, instale o **mesmo APK**, abra **Conectar a servidor existente** e digite apenas `192.168.1.50` (sem `http://` ou porta).
 4. Entre com o código da sala, escolha **Câmera do tabuleiro** e toque em **Abrir câmera nativa automática**. Permita acesso à câmera e posicione o celular no tripé. Foto é enviada aproximadamente a cada cinco segundos enquanto a tela de captura está aberta.
-5. No controlador, abra o painel de regras, selecione fotos das páginas do manual usando o gerenciador de imagens e, se tiver IA configurada, solicite a interpretação. Revise antes de salvar. Sem IA, digite as regras e pelo menos uma ação.
+5. No controlador, abra o painel de regras e selecione o PDF do manual ou fotos de suas páginas; se tiver IA configurada, solicite a interpretação. Revise antes de salvar. Sem IA, digite as regras e pelo menos uma ação.
 6. Atualize fase, turno e condições do tabuleiro manualmente; solicite proposta via IA ou escolha uma ação manual. Confirme, então execute o movimento físico.
 7. Ative **Falar as ações em voz alta** no controlador para ouvir a jogada aprovada em português.
 8. Para ler cartas privadas, use o segundo ou terceiro celular, selecione **Leitor privado** e toque em **Abrir leitor privado nativo**, capturando cada carta dentro da caixa de leitura. Esse recurso requer chave de IA.

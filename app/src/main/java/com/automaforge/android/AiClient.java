@@ -14,6 +14,20 @@ import java.util.List;
 
 /** Optional cloud inference; UI and games remain local. Never forward the API key to browsers. */
 final class AiClient {
+    static final class RuleFile {
+        final byte[] bytes;
+        final String mimeType;
+        final String fileName;
+
+        RuleFile(byte[] bytes, String mimeType, String fileName) {
+            this.bytes = bytes;
+            this.mimeType = mimeType;
+            this.fileName = fileName;
+        }
+
+        static RuleFile image(byte[] bytes) { return new RuleFile(bytes, "image/jpeg", "manual.jpg"); }
+    }
+
     private final Context context;
     AiClient(Context context) { this.context = context.getApplicationContext(); }
     String key() { return context.getSharedPreferences("private_settings", 0).getString("api_key", "").trim(); }
@@ -33,13 +47,19 @@ final class AiClient {
         }
     }
 
-    JSONObject ask(String instructions, String schema, List<byte[]> photos) throws Exception {
+    JSONObject ask(String instructions, String schema, List<RuleFile> files) throws Exception {
         if (!enabled()) throw new ApiException(409, "Configure a chave OpenAI no aparelho controlador para ativar IA.");
         JSONArray content = new JSONArray();
         content.put(GameStore.obj("type", "input_text", "text", instructions));
-        if (photos != null) for (byte[] photo : photos) {
-            String encoded = Base64.encodeToString(photo, Base64.NO_WRAP);
-            content.put(GameStore.obj("type", "input_image", "image_url", "data:image/jpeg;base64," + encoded, "detail", "high"));
+        if (files != null) for (RuleFile file : files) {
+            String encoded = Base64.encodeToString(file.bytes, Base64.NO_WRAP);
+            if ("application/pdf".equals(file.mimeType)) {
+                content.put(GameStore.obj("type", "input_file", "filename", file.fileName,
+                    "file_data", "data:application/pdf;base64," + encoded));
+            } else {
+                content.put(GameStore.obj("type", "input_image",
+                    "image_url", "data:image/jpeg;base64," + encoded, "detail", "high"));
+            }
         }
         JSONObject schemaFormat = GameStore.obj("type", "json_schema", "name", "automaforge_" + schema,
                 "schema", schema(schema), "strict", true);
@@ -73,11 +93,11 @@ final class AiClient {
         } finally { conn.disconnect(); }
     }
 
-    JSONObject rules(String name, List<byte[]> pages) throws Exception {
-        return ask("Leia SOMENTE estas páginas de manual de jogo de tabuleiro. Nome informado: " + name +
+    JSONObject rules(String name, List<RuleFile> files) throws Exception {
+        return ask("Leia SOMENTE estas páginas ou documentos de manual de jogo de tabuleiro. Nome informado: " + name +
             ". Responda em português. Extraia regras aplicáveis a um adversário artificial, configuração e fluxo de turnos; " +
             "ações baseadas em regras, com condições. Não invente conteúdo ausente. Se o manual não tiver modo solo, " +
-            "as ações são hipóteses de emulação de jogador. Informe incertezas. Leia as páginas na ordem enviada.", "rules", pages);
+            "as ações são hipóteses de emulação de jogador. Informe incertezas. Leia as páginas na ordem enviada.", "rules", files);
     }
 
     JSONObject board(JSONObject room, byte[] photo) throws Exception {
@@ -85,13 +105,13 @@ final class AiClient {
             "Não modifique o estado da partida. Responda em português. Regras: " +
             GameStore.clip(room.optString("rules_text"), 16000) + " Estado: " +
             GameStore.obj("turn",room.optInt("turn"), "phase",room.optString("phase"),
-                "variables",room.optJSONObject("variables")).toString(), "board", java.util.Collections.singletonList(photo));
+                "variables",room.optJSONObject("variables")).toString(), "board", java.util.Collections.singletonList(RuleFile.image(photo)));
     }
 
     JSONObject privateCard(JSONObject room, byte[] photo) throws Exception {
         return ask("Leia esta carta privada da automa. Responda em português e descreva somente o conteúdo realmente legível. " +
             "Não invente texto. A leitura é exclusiva da automa, não deve ser mostrada ao jogador. Regras: " +
-            GameStore.clip(room.optString("rules_text"), 10000), "card", java.util.Collections.singletonList(photo));
+            GameStore.clip(room.optString("rules_text"), 10000), "card", java.util.Collections.singletonList(RuleFile.image(photo)));
     }
 
     JSONObject propose(JSONObject room, JSONArray privateCards) throws Exception {

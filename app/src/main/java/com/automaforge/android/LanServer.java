@@ -124,6 +124,11 @@ final class LanServer {
         int status; byte[] body; String contentType;
         Response(int status, byte[] body, String type) { this.status = status; this.body=body; this.contentType=type; }
     }
+    private static final class UploadFile {
+        final byte[] bytes;
+        final String mimeType;
+        UploadFile(byte[] bytes, String mimeType) { this.bytes=bytes; this.mimeType=mimeType; }
+    }
     private static Response json(int status, Object value) {
         return new Response(status, String.valueOf(value).getBytes(StandardCharsets.UTF_8), "application/json; charset=utf-8");
     }
@@ -206,14 +211,17 @@ final class LanServer {
             }
         }
         if (method.equals("POST") && rest.equals("/rules/pages")) {
-            List<byte[]> files=files(req);
+            List<UploadFile> files=files(req);
             synchronized(store) {
                 JSONObject r=store.get(code);JSONArray names=r.getJSONArray("rule_pages");
-                if (files.isEmpty() || files.size()>12 || files.size()+names.length()>30) throw new ApiException(400,"Limite de 12 fotos por envio e 30 por sala.");
+                if (files.isEmpty() || files.size()>12 || files.size()+names.length()>30) throw new ApiException(400,"Limite de 12 arquivos por envio e 30 por sala.");
                 File folder=store.photoDir(code,"rules");
-                for (byte[] content: files) {
-                    String name=UUID.randomUUID().toString()+".jpg";
-                    Files.write(new File(folder,name).toPath(), jpeg(content,1600));
+                for (UploadFile content: files) {
+                    boolean pdf="application/pdf".equals(content.mimeType);
+                    if (pdf && !isPdf(content.bytes)) throw new ApiException(400,"Arquivo PDF inválido.");
+                    String name=UUID.randomUUID().toString()+(pdf?".pdf":".jpg");
+                    byte[] stored=pdf?content.bytes:jpeg(content.bytes,1600);
+                    Files.write(new File(folder,name).toPath(), stored);
                     names.put(name);
                 }
                 r.put("rules_draft",JSONObject.NULL);store.save(r,true);broadcast(code);
@@ -221,26 +229,32 @@ final class LanServer {
             }
         }
         if (method.equals("POST") && rest.equals("/rules/interpret")) {
-            JSONObject snapshot;List<byte[]> photos=new ArrayList<>();int revision;
+            JSONObject snapshot;List<AiClient.RuleFile> files=new ArrayList<>();int revision;
             synchronized(store) {
                 JSONObject r=store.get(code);revision=r.optInt("revision");snapshot=new JSONObject(r.toString());
                 JSONArray names=r.getJSONArray("rule_pages");
-                if (names.length()==0)throw new ApiException(409,"Fotografe páginas do manual.");
-                for (int i=0; i<names.length(); i++) photos.add(Files.readAllBytes(new File(store.photoDir(code,"rules"),names.getString(i)).toPath()));
+                if (names.length()==0)throw new ApiException(409,"Envie o PDF ou fotografias do manual.");
+                for (int i=0; i<names.length(); i++) {
+                    String name=names.getString(i);
+                    byte[] content=Files.readAllBytes(new File(store.photoDir(code,"rules"),name).toPath());
+                    files.add(name.toLowerCase(Locale.ROOT).endsWith(".pdf")
+                        ? new AiClient.RuleFile(content,"application/pdf","manual.pdf")
+                        : AiClient.RuleFile.image(content));
+                }
             }
             if (!ai.enabled()) throw new ApiException(409,"Configure a chave de IA no controlador ou preencha as regras manualmente.");
             JSONObject draft = new JSONObject(); JSONArray actions = new JSONArray(); JSONArray uncertainties=new JSONArray();
             StringBuilder rules=new StringBuilder(), setup=new StringBuilder(),turns=new StringBuilder();
-            for (int start=0; start<photos.size(); start+=12) {
-                int end=Math.min(start+12,photos.size());
-                JSONObject part=ai.rules(snapshot.optString("game_name"),photos.subList(start,end));
-                String label="\n[Páginas "+(start+1)+"–"+end+"]\n";
+            for (int start=0; start<files.size(); start+=12) {
+                int end=Math.min(start+12,files.size());
+                JSONObject part=ai.rules(snapshot.optString("game_name"),files.subList(start,end));
+                String label="\n[Arquivos "+(start+1)+"–"+end+"]\n";
                 rules.append(label).append(part.optString("rules_text"));setup.append(label).append(part.optString("setup"));
                 turns.append(label).append(part.optString("turn_flow"));
                 JSONArray a=part.optJSONArray("actions");if(a!=null)for(int i=0;i<a.length();i++)actions.put(a.get(i));
                 JSONArray u=part.optJSONArray("uncertainties");if(u!=null)for(int i=0;i<u.length();i++)uncertainties.put(u.get(i));
             }
-            if (photos.size()>12) uncertainties.put("Interpretação em lotes; revise condições entre páginas de lotes diferentes.");
+            if (files.size()>12) uncertainties.put("Interpretação em lotes; revise condições entre páginas de lotes diferentes.");
             draft.put("game_name",snapshot.optString("game_name"));draft.put("rules_text",rules.toString());
             draft.put("setup",setup.toString());draft.put("turn_flow",turns.toString());
             draft.put("actions",normalizeActions(actions));draft.put("uncertainties",uncertainties);
@@ -266,7 +280,7 @@ final class LanServer {
             }
         }
         if (method.equals("POST") && rest.equals("/board/photo")) {
-            byte[] content=files(req).get(0);byte[] compressed=jpeg(content,1280);
+            byte[] content=files(req).get(0).bytes;byte[] compressed=jpeg(content,1280);
             synchronized(store) {
                 JSONObject r=store.get(code);Files.write(store.boardPhoto(code).toPath(),compressed);
                 int version=r.optInt("board_version")+1;r.put("board_version",version);
@@ -291,7 +305,7 @@ final class LanServer {
             }
         }
         if (method.equals("POST") && rest.equals("/cards/private")) {
-            byte[] photo=jpeg(files(req).get(0),1600);JSONObject snapshot;
+            byte[] photo=jpeg(files(req).get(0).bytes,1600);JSONObject snapshot;
             synchronized(store) {
                 if(store.privateCards(code).length()>=40)throw new ApiException(409,"Limite de 40 cartas privadas.");
                 snapshot=new JSONObject(store.get(code).toString());
@@ -423,13 +437,18 @@ final class LanServer {
         }
         return -1;
     }
-    private static List<byte[]> files(Request req) throws Exception {
+    private static List<UploadFile> files(Request req) throws Exception {
         String type=req.header("content-type");
-        if(type.startsWith("image/jpeg")||type.startsWith("image/png")||type.startsWith("image/webp")) {
-            if(req.body.length==0)throw new ApiException(400,"Imagem vazia.");
-            return Collections.singletonList(req.body);
+        if(type.regionMatches(true,0,"image/",0,6)||type.regionMatches(true,0,"application/pdf",0,15)) {
+            if(req.body.length==0)throw new ApiException(400,"Arquivo vazio.");
+            if(req.body.length>10*1024*1024)throw new ApiException(413,"Arquivo maior que 10 MB.");
+            String mime=type.split(";",2)[0].trim().toLowerCase(Locale.ROOT);
+            if (!"application/pdf".equals(mime) && !mime.startsWith("image/"))
+                throw new ApiException(400,"Envie uma imagem ou um arquivo PDF.");
+            if ("application/pdf".equals(mime) && !isPdf(req.body)) throw new ApiException(400,"Arquivo PDF inválido.");
+            return Collections.singletonList(new UploadFile(req.body,mime));
         }
-        if(!type.startsWith("multipart/form-data"))throw new ApiException(400,"Envie imagem JPEG ou multipart/form-data.");
+        if(!type.regionMatches(true,0,"multipart/form-data",0,19))throw new ApiException(400,"Envie uma imagem, um PDF ou um formulário multipart.");
         String boundary=null;for(String option:type.split(";")) {
             String s=option.trim();if(s.startsWith("boundary=")) boundary=s.substring(9).replace("\"", "");
         }
@@ -437,7 +456,7 @@ final class LanServer {
         byte[] prefix=("--"+boundary).getBytes(StandardCharsets.ISO_8859_1);
         byte[] next=("\r\n--"+boundary).getBytes(StandardCharsets.ISO_8859_1);
         byte[] separator="\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
-        List<byte[]> result=new ArrayList<>();int pos=locate(req.body,prefix,0);
+        List<UploadFile> result=new ArrayList<>();int pos=locate(req.body,prefix,0);
         while(pos>=0) {
             int head=pos+prefix.length;
             if(head+1<req.body.length && req.body[head]=='-'&&req.body[head+1]=='-')break;
@@ -448,13 +467,52 @@ final class LanServer {
             int dataEnd=locate(req.body,next,dataStart);
             if(dataEnd<0)throw new ApiException(400,"Upload multipart incompleto.");
             if(headers.toLowerCase(Locale.ROOT).contains("filename=")) {
-                if(dataEnd-dataStart>10*1024*1024)throw new ApiException(413,"Foto maior que 10 MB.");
-                result.add(Arrays.copyOfRange(req.body,dataStart,dataEnd));
+                if(dataEnd-dataStart>10*1024*1024)throw new ApiException(413,"Arquivo maior que 10 MB.");
+                byte[] content=Arrays.copyOfRange(req.body,dataStart,dataEnd);
+                String partType=partHeader(headers,"content-type").toLowerCase(Locale.ROOT);
+                String disposition=partHeader(headers,"content-disposition");
+                String fileName=partFileName(disposition).toLowerCase(Locale.ROOT);
+                String mime=partType.split(";",2)[0].trim();
+                if (mime.isEmpty() || "application/octet-stream".equals(mime)) mime=mimeFromName(fileName);
+                if (!isSupportedUploadType(mime)) throw new ApiException(400,"Envie uma imagem JPEG, PNG ou WebP, ou um arquivo PDF.");
+                if ("application/pdf".equals(mime) && !isPdf(content)) throw new ApiException(400,"Arquivo PDF inválido.");
+                result.add(new UploadFile(content,mime));
             }
             pos=dataEnd+2;
         }
-        if(result.isEmpty())throw new ApiException(400,"Selecione ao menos uma foto.");
+        if(result.isEmpty())throw new ApiException(400,"Selecione ao menos um arquivo.");
         return result;
+    }
+    private static String partHeader(String headers,String name) {
+        for(String line:headers.split("\r\n")) {
+            int colon=line.indexOf(':');
+            if(colon>0&&line.substring(0,colon).trim().equalsIgnoreCase(name))return line.substring(colon+1).trim();
+        }
+        return "";
+    }
+    private static String partFileName(String disposition) {
+        for(String parameter:disposition.split(";")) {
+            String value=parameter.trim();
+            if(value.regionMatches(true,0,"filename=",0,9)) {
+                String name=value.substring(9).trim();
+                if(name.length()>=2&&name.startsWith("\"")&&name.endsWith("\""))name=name.substring(1,name.length()-1);
+                return name;
+            }
+        }
+        return "";
+    }
+    private static String mimeFromName(String name) {
+        if(name.endsWith(".pdf"))return "application/pdf";
+        if(name.endsWith(".png"))return "image/png";
+        if(name.endsWith(".webp"))return "image/webp";
+        if(name.endsWith(".jpg")||name.endsWith(".jpeg"))return "image/jpeg";
+        return "";
+    }
+    private static boolean isSupportedUploadType(String mime) {
+        return "application/pdf".equals(mime)||"image/jpeg".equals(mime)||"image/png".equals(mime)||"image/webp".equals(mime);
+    }
+    private static boolean isPdf(byte[] bytes) {
+        return bytes.length>=5&&bytes[0]=='%'&&bytes[1]=='P'&&bytes[2]=='D'&&bytes[3]=='F'&&bytes[4]=='-';
     }
     private static byte[] jpeg(byte[] bytes,int maxSide) throws Exception {
         if(bytes.length>10*1024*1024)throw new ApiException(413,"Foto maior que 10 MB.");

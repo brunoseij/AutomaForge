@@ -40,6 +40,17 @@ def test_server_exposes_ui_contract():
     assert 'sec-websocket-key' in server
 
 
+def test_rule_manual_accepts_pdf():
+    html = (ASSETS/'web/index.html').read_text()
+    server = (JAVA/'LanServer.java').read_text()
+    ai = (JAVA/'AiClient.java').read_text()
+    assert 'accept="application/pdf,.pdf,image/*"' in html
+    assert '"application/pdf"' in server
+    assert 'isPdf(content.bytes)' in server
+    assert '"type", "input_file"' in ai
+    assert '"file_data", "data:application/pdf;base64," + encoded' in ai
+
+
 def test_private_card_not_stored_with_public_state():
     store = (JAVA/'GameStore.java').read_text()
     server = (JAVA/'LanServer.java').read_text()

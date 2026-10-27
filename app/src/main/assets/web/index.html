@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111925">
+  <title>AutomaForge — Jogue contra uma automa</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="AutomaForge — início"><span class="brand-mark">A<span>✦</span></span> <span>Automa<span class="brand-accent">Forge</span></span></a>
+    <div class="topstatus"><span class="status-dot" id="statusDot"></span><span id="statusText">Conectando…</span></div>
+  </header>
+  <main>
+    <section id="landing" class="landing">
+      <div class="hero-label">VERSÃO 0.2 ALPHA · ANDROID LOCAL</div>
+      <h1>Seu tabuleiro.<br><em>Um novo adversário.</em></h1>
+      <p>Use o celular no tripé para observar o tabuleiro, outro como controlador e, opcionalmente, um leitor privado de cartas. Configure qualquer jogo a partir do manual ou manualmente, sem catálogo obrigatório.</p>
+      <div class="landing-grid">
+        <form id="createForm" class="panel">
+          <h2>Criar partida</h2>
+          <label for="newName">Nome do jogo</label>
+          <input id="newName" maxlength="100" placeholder="Ex.: meu jogo de tabuleiro" required value="Jogo de tabuleiro">
+          <button type="submit" class="primary full">Criar sala <span>↗</span></button>
+        </form>
+        <form id="joinForm" class="panel">
+          <h2>Entrar em uma sala</h2>
+          <label for="joinCode">Código da sala</label>
+          <input id="joinCode" maxlength="8" minlength="8" placeholder="ABCDEFGH" autocomplete="off" autocapitalize="characters" required>
+          <button type="submit" class="secondary full">Conectar dispositivo <span>→</span></button>
+        </form>
+      </div>
+      <p class="muted tiny">O celular controlador é o servidor. Nos demais aparelhos, use o APK para câmera automática ou abra o IP do controlador no navegador para configuração e envio manual de fotos.</p>
+    </section>
+
+    <section id="workspace" class="workspace hidden">
+      <div class="workspace-head">
+        <div><div class="eyebrow">PARTIDA ATIVA</div><h1 id="roomTitle">Jogo</h1><div class="room-meta">Sala <strong id="roomCode"></strong> · Turno <strong id="roomTurn">1</strong></div></div>
+        <div class="head-actions"><button class="secondary small" id="copyLink">Copiar link</button><button class="secondary small" id="leaveRoom">Sair da sala</button></div>
+      </div>
+      <nav class="role-tabs" aria-label="Papel deste dispositivo">
+        <button id="roleController" class="selected" data-role="controller">◈ Controlador</button>
+        <button id="roleBoard" data-role="board">▣ Câmera do tabuleiro</button>
+        <button id="roleCards" data-role="cards">▤ Leitor privado</button>
+      </nav>
+      <div id="roleHelp" class="role-help"></div>
+
+      <div id="controllerPane" class="pane">
+        <div class="dashboard-grid">
+          <div class="main-column">
+            <article class="panel">
+              <div class="section-head"><div><span class="eyebrow">01 · PREPARAÇÃO</span><h2>Configurar regras</h2></div><span class="chip" id="rulesChip">Sem regras</span></div>
+              <div class="divider"></div>
+              <label for="rulePhotos">Fotografias do manual</label>
+              <input type="file" id="rulePhotos" accept="image/*" capture="environment" multiple>
+              <p class="hint">Envie fotos legíveis. Você pode adicionar páginas em etapas.</p>
+              <div class="button-row"><button id="uploadRules" class="secondary">Adicionar fotos</button><button id="interpretRules" class="primary">Interpretar com IA</button></div>
+              <p class="tiny muted" id="rulesCount">0 páginas carregadas</p>
+              <div id="draftBox" class="notice hidden"></div>
+              <details id="manualRulesDetails" open>
+                <summary>Revisar ou escrever as regras</summary>
+                <form id="rulesForm" class="stacked-form">
+                  <label for="editGame">Nome do jogo</label><input id="editGame" maxlength="100">
+                  <label for="editRules">Resumo das regras (editável)</label><textarea id="editRules" rows="7" placeholder="Descreva objetivos, movimentos, restrições e pontuação."></textarea>
+                  <label for="editSetup">Preparação</label><textarea id="editSetup" rows="2"></textarea>
+                  <label for="editTurnFlow">Fluxo do turno</label><textarea id="editTurnFlow" rows="2"></textarea>
+                  <label for="editActions">Ações possíveis — uma por linha</label>
+                  <textarea id="editActions" rows="5" placeholder="Mover peça | Move uma peça | Quando o movimento for permitido&#10;Comprar carta | Compra uma carta | Quando houver cartas disponíveis"></textarea>
+                  <div class="hint">Formato: nome | descrição | condição. A IA só poderá sugerir as ações cadastradas.</div>
+                  <label for="editUncertainties">Dúvidas e ambiguidades — uma por linha</label><textarea id="editUncertainties" rows="2"></textarea>
+                  <button type="submit" class="primary">Salvar regras revisadas</button>
+                </form>
+              </details>
+            </article>
+
+            <article class="panel">
+              <div class="section-head"><div><span class="eyebrow">02 · TURNO</span><h2>Decisão da automa</h2></div><span class="chip accent" id="turnChip">Aguardando</span></div>
+              <p class="hint">Toda jogada precisa de confirmação. A automa sugere; você executa o movimento com os componentes físicos.</p>
+              <div class="button-row"><button id="aiPropose" class="primary">✦ Sugerir jogada com IA</button><button id="toggleManual" class="secondary">Escolher manualmente</button></div>
+              <form id="manualProposalForm" class="stacked-form hidden">
+                <label for="manualAction">Ação</label><select id="manualAction"></select>
+                <label for="manualSpeech">O que a automa deve dizer/exibir</label><textarea id="manualSpeech" rows="2" placeholder="Vou mover minha peça para a próxima região."></textarea>
+                <label for="manualSteps">Instruções para movimentar os componentes — uma por linha</label><textarea id="manualSteps" rows="3" placeholder="Mova o marcador azul uma casa à frente."></textarea>
+                <button type="submit" class="primary">Revisar esta jogada</button>
+              </form>
+              <div id="proposalArea" class="proposal-empty">Nenhuma jogada pendente.</div>
+              <div class="speech-row"><label class="switchline"><input type="checkbox" id="voiceEnabled"> <span>Falar as ações em voz alta</span></label><button id="repeatSpeech" class="text-button">Repetir última fala ↗</button></div>
+            </article>
+
+            <article class="panel">
+              <div class="section-head"><div><span class="eyebrow">03 · REGISTRO</span><h2>Histórico</h2></div></div>
+              <div id="historyArea" class="history-area muted">Sem jogadas aprovadas.</div>
+            </article>
+          </div>
+          <aside class="side-column">
+            <article class="panel">
+              <div class="section-head"><div><span class="eyebrow">VISÃO DO TABULEIRO</span><h2>Imagem atual</h2></div><span id="boardAge" class="chip">Aguardando foto</span></div>
+              <div class="board-frame" id="boardFrame"><div id="boardPlaceholder">Conecte o celular do tripé na aba<br>“Câmera do tabuleiro”.</div><img id="boardImage" alt="Fotografia atual do tabuleiro" class="hidden"></div>
+              <button id="analyzeBoard" class="secondary full">Analisar imagem com IA</button>
+              <div id="observationArea" class="hint padded-top">A análise visual é opcional e deve ser conferida.</div>
+            </article>
+            <article class="panel">
+              <div class="section-head"><div><span class="eyebrow">ESTADO DA PARTIDA</span><h2>Dados conhecidos</h2></div></div>
+              <form id="stateForm" class="stacked-form">
+                <div class="two-cols"><div><label for="editTurn">Turno</label><input id="editTurn" type="number" min="1" value="1"></div><div><label for="editPhase">Fase</label><input id="editPhase" value="Preparação"></div></div>
+                <label for="editVariables">Variáveis — uma por linha</label><textarea id="editVariables" rows="4" placeholder="pontos_automa = 3&#10;recursos = 2"></textarea>
+                <label for="editNotes">Anotações visíveis do tabuleiro</label><textarea id="editNotes" rows="4" placeholder="Azul está na terceira posição... "></textarea>
+                <button type="submit" class="secondary full">Atualizar estado</button>
+              </form>
+              <div class="divider"></div><div class="statrow"><span>Cartas na memória privada</span><strong id="privateCount">0</strong></div>
+              <button class="text-button danger" id="clearCards">Descartar todas as cartas privadas</button>
+            </article>
+            <article class="panel muted small-text"><strong>Limite desta versão</strong><p>Não há garantia automática de interpretação completa do manual, leitura correta das peças ou legalidade de jogadas. Revise e confirme antes de mover peças.</p></article>
+          </aside>
+        </div>
+      </div>
+
+      <div id="boardPane" class="pane hidden camera-pane">
+        <div class="panel camera-panel"><span class="eyebrow">DISPOSITIVO NO TRIPÉ</span><h2>Observação do tabuleiro</h2>
+          <p class="hint">Posicione a câmera acima do tabuleiro. Não é necessário reposicionar o tripé para ler cartas privadas; use o leitor dedicado.</p>
+          <div class="camera-preview"><video id="boardVideo" autoplay playsinline muted></video><div class="camera-fallback" id="boardFallback">A câmera será exibida aqui.</div></div>
+          <div class="button-row"><button id="startBoardCamera" class="primary">Ativar câmera</button><button id="sendBoardPhoto" class="secondary">Enviar foto agora</button></div>
+          <label class="switchline" id="boardAutoRow"><input type="checkbox" id="boardAuto"> <span>Enviar uma foto a cada 5 segundos (navegador HTTPS)</span></label>
+          <label for="boardFile">Ou fotografar/selecionar foto manualmente</label><input type="file" id="boardFile" accept="image/*" capture="environment">
+          <p id="boardFeedback" class="hint">No APK Android, tocar em Ativar câmera abre captura nativa a cada cinco segundos. Pelo navegador HTTP, utilize a foto manual.</p>
+        </div>
+      </div>
+
+      <div id="cardsPane" class="pane hidden camera-pane">
+        <div class="panel camera-panel"><span class="eyebrow">LEITOR PRIVADO</span><h2>Cartas ocultas da automa</h2>
+          <p class="hint">Use uma caixa de leitura opaca, com a carta voltada somente para a câmera interna. A face não aparece no controlador. Este modo necessita de IA configurada.</p>
+          <div class="camera-preview"><video id="cardsVideo" autoplay playsinline muted></video><div class="camera-fallback" id="cardsFallback">Coloque a câmera dentro da caixa de leitura privada.</div></div>
+          <div class="button-row"><button id="startCardsCamera" class="primary">Ativar câmera</button><button id="sendPrivateCard" class="secondary">Ler uma carta privadamente</button></div>
+          <label for="cardFile">Ou fotografar/selecionar uma imagem</label><input type="file" id="cardFile" accept="image/*" capture="environment">
+          <p class="hint" id="cardsFeedback">A imagem é enviada somente ao servidor e ao serviço de IA configurado; não é salva como foto pública.</p>
+          <div class="notice">Atenção: o dispositivo de leitura ainda mostra a prévia da câmera. Mantenha sua tela fora do campo de visão do jogador humano.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+<script src="/static/app.js" defer></script>
+</body>
+</html>

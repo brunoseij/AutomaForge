@@ -1,0 +1,1 @@
+{"type": "object", "properties": {"observations": {"type": "array", "items": {"type": "string"}}, "possible_changes": {"type": "array", "items": {"type": "string"}}, "uncertainties": {"type": "array", "items": {"type": "string"}}}, "required": ["observations", "possible_changes", "uncertainties"], "additionalProperties": false}

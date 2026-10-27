@@ -1,0 +1,1 @@
+{"type": "object", "properties": {"card_reading": {"type": "string"}, "uncertainties": {"type": "array", "items": {"type": "string"}}}, "required": ["card_reading", "uncertainties"], "additionalProperties": false}

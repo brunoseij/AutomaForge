@@ -16,6 +16,8 @@
   let boardVersion = -1;
   let timer = null;
   let busyPhoto = false;
+  let processingTimer = null;
+  let processingPollBusy = false;
   let toastTimer = null;
   const cameras = { board: null, cards: null };
   $('voiceEnabled').checked = localStorage.getItem('automaforge_voice') === 'yes';
@@ -102,6 +104,9 @@
     $('workspace').classList.remove('hidden');
     updateURL(); switchRole(role); receiveState(data);
     connectWebsocket();
+    clearInterval(processingTimer);
+    processingTimer = setInterval(() => refreshProcessing().catch(() => {}), 1800);
+    refreshProcessing().catch(() => {});
   }
   function formIsBeingEdited(formId) {
     const active = document.activeElement;
@@ -117,6 +122,7 @@
     return (actions || []).map(a => [a.name, a.description || '', a.precondition || ''].join(' | ')).join('\n');
   }
   function fillRules(src) {
+    $('rulesReviewed').checked = false;
     $('editGame').value = src.game_name || room?.game_name || '';
     $('editRules').value = src.rules_text || '';
     $('editSetup').value = src.setup || '';
@@ -286,7 +292,7 @@
   for (const [id, r] of [['roleController','controller'],['roleBoard','board'],['roleCards','cards']]) {
     $(id).addEventListener('click', () => switchRole(r));
   }
-  $('leaveRoom').addEventListener('click', () => { leaving = true; clearInterval(timer); stopCamera('board'); stopCamera('cards');
+  $('leaveRoom').addEventListener('click', () => { leaving = true; clearInterval(timer); clearInterval(processingTimer); stopCamera('board'); stopCamera('cards');
     if (ws) ws.close(); code = ''; room = null; updateURL(); location.reload(); });
   $('copyLink').addEventListener('click', () => copyText(linkFor(role)));
 
@@ -298,14 +304,49 @@
     $('rulePhotos').value = '';
     toast(`${data.pages_count} arquivos do manual carregados nesta sala.`);
   }));
+  async function refreshProcessing() {
+    if (!code || role !== 'controller' || processingPollBusy) return;
+    processingPollBusy = true;
+    try {
+      const state = await request(api('/rules/processing'));
+      $('processingStage').textContent = `${state.stage} · ${state.state}`;
+      $('processingProgress').max = state.total || 1;
+      $('processingProgress').value = state.page || 0;
+      $('processingDetails').textContent = `${state.page || 0}/${state.total || 0} páginas · OCR: ${state.ocr} · Visual: ${state.visual}. ${state.message || ''}`;
+      const m = state.metrics || {};
+      const bytes = n => `${((n || 0)/1024).toFixed(1)} KiB`;
+      $('processingMetrics').textContent = `Páginas: ${m.pages || 0} (nativas ${m.nativePages || 0}, OCR ${m.ocrPages || 0}). ` +
+        `Elementos visuais: ${m.visualsIdentified || 0}; imagens confirmadas/tentadas: ${m.imagesTransmitted || 0}/${m.imagesAttempted || 0}. ` +
+        `Originais: ${bytes(m.originalPdfBytes)}; JSON escrito na conexão: ${bytes(m.sentRequestBytes)} (preparado: ${bytes(m.attemptedRequestBytes)}); diferença: ${bytes(m.byteDifference)}. ` +
+        `Chamadas nesta execução: ${m.calls || 0}; cache hit/miss: ${m.cacheHits || 0}/${m.cacheMisses || 0}. ` +
+        `Tempo local/remoto: ${m.localMs || 0}/${m.remoteMs || 0} ms. ` +
+        (m.usageAvailable ? `Tokens informados pela API: entrada ${m.inputTokens}, saída ${m.outputTokens}. ` : 'Tokens faturados indisponíveis. ') +
+        'Economia de tokens e de custo: sem medição de referência; não calculada.';
+      $('interpretRules').disabled = state.state === 'running';
+      $('cancelRules').disabled = state.state !== 'running';
+      if (state.state === 'needs_review' && state.draft && !room.rules_draft && !room.rules_text) {
+        receiveState(await request(api('')));
+      }
+    } finally { processingPollBusy = false; }
+  }
   $('interpretRules').addEventListener('click', run(async () => {
-    const draft = await request(api('/rules/interpret'), {method:'POST'});
-    fillRules(draft);
-    $('manualRulesDetails').open = true;
-    toast('Rascunho gerado. Confira e salve as regras.');
+    await request(api('/rules/interpret'), {method:'POST', json:{retry_uncertain:$('retryUncertain').checked, original_fallback:$('originalFallback').checked}});
+    $('retryUncertain').checked = false;
+    await refreshProcessing();
+    toast('Processamento iniciado. É possível cancelar e retomar pelos checkpoints.');
+  }));
+  $('cancelRules').addEventListener('click', run(async () => {
+    await request(api('/rules/cancel'), {method:'POST'});
+    toast('Cancelamento solicitado. Aguarde a liberação dos recursos.');
+  }));
+  $('deleteManuals').addEventListener('click', run(async () => {
+    if (!confirm('Apagar os arquivos importados e o cache destes manuais? As regras salvas na sala permanecem.')) return;
+    await request(api('/rules/manuals'), {method:'DELETE'});
+    await refreshProcessing();
+    toast('Manuais e cache apagados.');
   }));
   $('rulesForm').addEventListener('submit', run(async () => {
-    const body = {game_name:$('editGame').value, rules_text:$('editRules').value,
+    const body = {human_validated:$('rulesReviewed').checked, game_name:$('editGame').value, rules_text:$('editRules').value,
       setup:$('editSetup').value, turn_flow:$('editTurnFlow').value,
       actions:parseActions($('editActions').value),
       uncertainties:$('editUncertainties').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)};
@@ -385,7 +426,7 @@
     $('cardsFeedback').textContent = `Carta registrada privadamente. Total: ${data.private_card_count}.` + (data.has_uncertainties ? ' A leitura teve incertezas: confira o enquadramento.' : '');
     toast('Carta interpretada sem exibir o conteúdo.');
   }));
-  window.addEventListener('beforeunload', () => { clearInterval(timer); stopCamera('board'); stopCamera('cards'); });
+  window.addEventListener('beforeunload', () => { clearInterval(timer); clearInterval(processingTimer); stopCamera('board'); stopCamera('cards'); });
 
   (async () => {
     if (window.AutomaAndroid) {

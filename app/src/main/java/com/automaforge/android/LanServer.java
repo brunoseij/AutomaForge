@@ -37,12 +37,24 @@ final class LanServer {
     private final Context context;
     private final GameStore store;
     private final AiClient ai;
+    private final RulebookJobs rulebookJobs;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final Map<String, java.util.Set<WsClient>> sockets = new ConcurrentHashMap<>();
     private volatile boolean running;
     private ServerSocket listener;
 
-    LanServer(Context ctx) { context = ctx.getApplicationContext(); store = new GameStore(context); ai = new AiClient(context); }
+    LanServer(Context ctx) {
+        context = ctx.getApplicationContext(); store = new GameStore(context); ai = new AiClient(context);
+        rulebookJobs = new RulebookJobs(context, (code, draft) -> {
+            try { synchronized(store) {
+                JSONObject room=store.get(code);
+                if(room.optInt("rules_revision")!=draft.optInt("base_rules_revision"))
+                    throw new IllegalStateException("O manual ou as regras mudaram durante a análise. O resultado ficou no cache; retome com o conteúdo atual.");
+                room.put("rules_draft",draft);store.save(room,true);broadcast(code);
+            } } catch(RuntimeException e) { throw e; }
+            catch(Exception e) { throw new IllegalStateException("Não foi possível salvar o rascunho; os checkpoints foram preservados."); }
+        });
+    }
     boolean isRunning() { return running; }
 
     synchronized void start() throws IOException {
@@ -66,6 +78,7 @@ final class LanServer {
         if (listener != null) try { listener.close(); } catch (IOException ignored) {}
         for (java.util.Set<WsClient> set : sockets.values()) for (WsClient socket : set) socket.close();
         sockets.clear();
+        rulebookJobs.close();
         // On next app launch, sessions reload from internal files; private cards are intentionally ephemeral.
     }
 
@@ -200,12 +213,17 @@ final class LanServer {
             JSONObject body=req.json();
             synchronized(store) {
                 JSONObject r=store.get(code);
+                if(!body.optBoolean("human_validated"))throw new ApiException(422,"Confirme a revisão das regras e ambiguidades antes de salvar.");
                 r.put("game_name",GameStore.clip(body.optString("game_name","Jogo sem nome"),100));
-                r.put("rules_text",GameStore.clip(body.optString("rules_text"),60000));
-                r.put("setup",GameStore.clip(body.optString("setup"),12000));
-                r.put("turn_flow",GameStore.clip(body.optString("turn_flow"),12000));
+                r.put("rules_text",body.optString("rules_text"));
+                r.put("setup",body.optString("setup"));
+                r.put("turn_flow",body.optString("turn_flow"));
                 r.put("actions",normalizeActions(body.optJSONArray("actions")));
                 r.put("uncertainties",body.optJSONArray("uncertainties")!=null?body.optJSONArray("uncertainties"):new JSONArray());
+                rulebookJobs.saveValidated(manualFiles(code,r),body);
+                r.put("rules_revision",r.optInt("rules_revision")+1);
+                // Keep the exact interpreted evidence alongside the user's editable corrections.
+                if(r.optJSONObject("rules_draft")!=null)r.put("rules_evidence",r.optJSONObject("rules_draft"));
                 r.put("rules_draft",JSONObject.NULL);r.put("proposal",JSONObject.NULL);
                 store.save(r,true);broadcast(code);return success(store.publicRoom(r));
             }
@@ -224,45 +242,31 @@ final class LanServer {
                     Files.write(new File(folder,name).toPath(), stored);
                     names.put(name);
                 }
+                r.put("rules_revision",r.optInt("rules_revision")+1);
                 r.put("rules_draft",JSONObject.NULL);store.save(r,true);broadcast(code);
                 return success(GameStore.obj("pages_count",names.length()));
             }
         }
-        if (method.equals("POST") && rest.equals("/rules/interpret")) {
-            JSONObject snapshot;List<AiClient.RuleFile> files=new ArrayList<>();int revision;
+        if (method.equals("GET") && rest.equals("/rules/processing")) return success(rulebookJobs.status(code));
+        if (method.equals("POST") && rest.equals("/rules/cancel")) return success(rulebookJobs.cancel(code));
+        if (method.equals("DELETE") && rest.equals("/rules/manuals")) {
             synchronized(store) {
-                JSONObject r=store.get(code);revision=r.optInt("revision");snapshot=new JSONObject(r.toString());
-                JSONArray names=r.getJSONArray("rule_pages");
-                if (names.length()==0)throw new ApiException(409,"Envie o PDF ou fotografias do manual.");
-                for (int i=0; i<names.length(); i++) {
-                    String name=names.getString(i);
-                    byte[] content=Files.readAllBytes(new File(store.photoDir(code,"rules"),name).toPath());
-                    files.add(name.toLowerCase(Locale.ROOT).endsWith(".pdf")
-                        ? new AiClient.RuleFile(content,"application/pdf","manual.pdf")
-                        : AiClient.RuleFile.image(content));
-                }
+                JSONObject r=store.get(code);List<File> originals=manualFiles(code,r);
+                try { rulebookJobs.delete(code,originals); }
+                catch(IllegalStateException e) { throw new ApiException(409,e.getMessage()); }
+                for(File file: originals) Files.deleteIfExists(file.toPath());
+                r.put("rule_pages",new JSONArray());r.put("rules_draft",JSONObject.NULL);
+                r.put("rules_revision",r.optInt("rules_revision")+1);store.save(r,true);broadcast(code);
+                return success(GameStore.obj("deleted",true));
             }
-            if (!ai.enabled()) throw new ApiException(409,"Configure a chave de IA no controlador ou preencha as regras manualmente.");
-            JSONObject draft = new JSONObject(); JSONArray actions = new JSONArray(); JSONArray uncertainties=new JSONArray();
-            StringBuilder rules=new StringBuilder(), setup=new StringBuilder(),turns=new StringBuilder();
-            for (int start=0; start<files.size(); start+=12) {
-                int end=Math.min(start+12,files.size());
-                JSONObject part=ai.rules(snapshot.optString("game_name"),files.subList(start,end));
-                String label="\n[Arquivos "+(start+1)+"–"+end+"]\n";
-                rules.append(label).append(part.optString("rules_text"));setup.append(label).append(part.optString("setup"));
-                turns.append(label).append(part.optString("turn_flow"));
-                JSONArray a=part.optJSONArray("actions");if(a!=null)for(int i=0;i<a.length();i++)actions.put(a.get(i));
-                JSONArray u=part.optJSONArray("uncertainties");if(u!=null)for(int i=0;i<u.length();i++)uncertainties.put(u.get(i));
-            }
-            if (files.size()>12) uncertainties.put("Interpretação em lotes; revise condições entre páginas de lotes diferentes.");
-            draft.put("game_name",snapshot.optString("game_name"));draft.put("rules_text",rules.toString());
-            draft.put("setup",setup.toString());draft.put("turn_flow",turns.toString());
-            draft.put("actions",normalizeActions(actions));draft.put("uncertainties",uncertainties);
+        }
+        if (method.equals("POST") && rest.equals("/rules/interpret")) {
+            JSONObject body=req.body.length==0?new JSONObject():req.json();
             synchronized(store) {
                 JSONObject r=store.get(code);
-                if(r.optInt("revision")!=revision)throw new ApiException(409,"As regras mudaram durante a análise. Tente novamente.");
-                r.put("rules_draft",draft);store.save(r,true);broadcast(code);
-                return success(draft);
+                try { return success(rulebookJobs.start(code,r.optString("game_name"),manualFiles(code,r),
+                    body.optBoolean("retry_uncertain"),body.optBoolean("original_fallback"),r.optInt("rules_revision"))); }
+                catch(IllegalArgumentException e) { throw new ApiException(409,e.getMessage()); }
             }
         }
         if (method.equals("PUT") && rest.equals("/state")) {
@@ -393,15 +397,25 @@ final class LanServer {
         throw new ApiException(404,"Rota não encontrada.");
     }
 
+    private List<File> manualFiles(String code,JSONObject room) throws Exception {
+        List<File> files=new ArrayList<>();JSONArray names=room.getJSONArray("rule_pages");
+        File directory=store.photoDir(code,"rules");
+        for(int i=0;i<names.length();i++) {
+            String name=names.getString(i);
+            if(!name.matches("[a-f0-9-]+\\.(pdf|jpg)"))throw new ApiException(400,"Nome de manual inválido.");
+            files.add(new File(directory,name));
+        }
+        return files;
+    }
     private static JSONArray normalizeActions(JSONArray source) {
-        JSONArray out=new JSONArray();java.util.Set<String> seen=new java.util.HashSet<>();
+        JSONArray out=new JSONArray();
         if(source==null)return out;
-        for(int i=0;i<Math.min(source.length(),100);i++) {
-            JSONObject action=source.optJSONObject(i);if(action==null)continue;
-            String name=GameStore.clip(action.optString("name").trim(),160);
-            if(name.isEmpty()||!seen.add(name.toLowerCase(Locale.ROOT)))continue;
-            out.put(GameStore.obj("name",name,"description",GameStore.clip(action.optString("description"),1500),
-                "precondition",GameStore.clip(action.optString("precondition"),1500)));
+        for(int i=0;i<source.length();i++) {
+            JSONObject action=source.optJSONObject(i);if(action==null)throw new IllegalArgumentException("Ação inválida.");
+            String name=action.optString("name").trim();
+            if(name.isEmpty())throw new IllegalArgumentException("Ação sem nome.");
+            out.put(GameStore.obj("name",name,"description",action.optString("description"),
+                "precondition",action.optString("precondition")));
         }
         return out;
     }

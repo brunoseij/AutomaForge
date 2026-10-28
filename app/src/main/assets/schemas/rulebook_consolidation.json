@@ -1,0 +1,92 @@
+{
+  "type": "object",
+  "properties": {
+    "game_name": {
+      "type": "string"
+    },
+    "rules_text": {
+      "type": "string"
+    },
+    "setup": {
+      "type": "string"
+    },
+    "turn_flow": {
+      "type": "string"
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "precondition": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "precondition"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "text",
+          "sources"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "covered_sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "game_name",
+    "rules_text",
+    "setup",
+    "turn_flow",
+    "actions",
+    "uncertainties",
+    "evidence",
+    "unresolved",
+    "covered_sources"
+  ],
+  "additionalProperties": false
+}

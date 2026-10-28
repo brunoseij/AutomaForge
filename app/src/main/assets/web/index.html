@@ -58,18 +58,28 @@
               <p class="hint">Envie o PDF do manual ou fotos legíveis. Você pode adicionar arquivos em etapas.</p>
               <div class="button-row"><button id="uploadRules" class="secondary">Adicionar arquivos</button><button id="interpretRules" class="primary">Interpretar com IA</button></div>
               <p class="tiny muted" id="rulesCount">0 arquivos carregados</p>
+              <section class="notice" aria-label="Processamento do manual">
+                <p id="processingStage" role="status" aria-live="polite">Processamento local aguardando.</p>
+                <progress id="processingProgress" max="1" value="0" style="width:100%"></progress>
+                <p id="processingDetails" class="hint"></p>
+                <p id="processingMetrics" class="tiny"></p>
+                <label><input type="checkbox" id="retryUncertain"> Confirmo repetir chamadas com resultado desconhecido (podem gerar nova cobrança)</label>
+                <label><input type="checkbox" id="originalFallback"> Usar fallback: enviar arquivos originais à OpenAI</label>
+                <div class="button-row"><button id="cancelRules" class="secondary">Cancelar processamento</button><button id="deleteManuals" class="secondary">Apagar manuais e cache</button></div>
+              </section>
               <div id="draftBox" class="notice hidden"></div>
               <details id="manualRulesDetails" open>
                 <summary>Revisar ou escrever as regras</summary>
                 <form id="rulesForm" class="stacked-form">
                   <label for="editGame">Nome do jogo</label><input id="editGame" maxlength="100">
-                  <label for="editRules">Resumo das regras (editável)</label><textarea id="editRules" rows="7" placeholder="Descreva objetivos, movimentos, restrições e pontuação."></textarea>
+                  <label for="editRules">Regras e referências (editáveis)</label><textarea id="editRules" rows="7" placeholder="Descreva objetivos, movimentos, restrições e pontuação."></textarea>
                   <label for="editSetup">Preparação</label><textarea id="editSetup" rows="2"></textarea>
                   <label for="editTurnFlow">Fluxo do turno</label><textarea id="editTurnFlow" rows="2"></textarea>
                   <label for="editActions">Ações possíveis — uma por linha</label>
                   <textarea id="editActions" rows="5" placeholder="Mover peça | Move uma peça | Quando o movimento for permitido&#10;Comprar carta | Compra uma carta | Quando houver cartas disponíveis"></textarea>
                   <div class="hint">Formato: nome | descrição | condição. A IA só poderá sugerir as ações cadastradas.</div>
                   <label for="editUncertainties">Dúvidas e ambiguidades — uma por linha</label><textarea id="editUncertainties" rows="2"></textarea>
+                  <label><input type="checkbox" id="rulesReviewed" required> Conferi as regras e as ambiguidades com o manual original.</label>
                   <button type="submit" class="primary">Salvar regras revisadas</button>
                 </form>
               </details>

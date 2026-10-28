@@ -30,7 +30,7 @@ final class AiClient {
 
     private final Context context;
     AiClient(Context context) { this.context = context.getApplicationContext(); }
-    String key() { return context.getSharedPreferences("private_settings", 0).getString("api_key", "").trim(); }
+    String key() { return new ApiKeyStore(context).read(); }
     boolean enabled() { return !key().isEmpty(); }
     String model() { return context.getSharedPreferences("private_settings", 0).getString("model", "gpt-4.1-mini"); }
 
@@ -58,7 +58,7 @@ final class AiClient {
                     "file_data", "data:application/pdf;base64," + encoded));
             } else {
                 content.put(GameStore.obj("type", "input_image",
-                    "image_url", "data:image/jpeg;base64," + encoded, "detail", "high"));
+                    "image_url", "data:" + file.mimeType + ";base64," + encoded, "detail", "high"));
             }
         }
         JSONObject schemaFormat = GameStore.obj("type", "json_schema", "name", "automaforge_" + schema,

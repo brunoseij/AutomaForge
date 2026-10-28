@@ -1,8 +1,8 @@
-# AutomaForge Android — v0.2.0-alpha
+# AutomaForge Android — v0.3.0-alpha
 
-**O celular controlador é o próprio servidor da partida.** Não é necessário computador, Python, Termux, Docker ou serviço em nuvem para sincronizar o jogo. A implementação é **Java para Android (API 26+)** e contém um servidor HTTP/WebSocket embutido, interface web hospedada no próprio aparelho e captura Camera2 nativa no celular satélite.
+**O celular controlador é o próprio servidor da partida.** Não é necessário computador, Python, Termux, Docker ou serviço em nuvem para sincronizar o jogo. A implementação é **Java e Kotlin para Android (API 26+)** e contém um servidor HTTP/WebSocket embutido, interface web hospedada no próprio aparelho e captura Camera2 nativa no celular satélite.
 
-> Estado da entrega: **código-fonte implementado, sintaxe JS e contratos estáticos checados; compilação real Android e testes em aparelhos NÃO executados neste ambiente** (Android SDK/Gradle não estão disponíveis). Não há APK verificado no pacote. Siga o procedimento de build abaixo para produzir o APK de teste.
+> O pipeline local de PDF foi integrado em Kotlin: extração nativa, OCR incorporado, recursos visuais sob demanda, cache retomável e revisão humana. Consulte [arquitetura e uso](docs/RULEBOOK_PIPELINE.md) e [resultados de validação](docs/VALIDATION.md).
 
 ## Arquitetura
 
@@ -26,7 +26,7 @@ Controlador Android (instale o APK)
 - Os satélites se conectam digitando o endereço IPv4 do controlador no primeiro painel do APK.
 - Uma única interface web disponibiliza controlador, câmera do tabuleiro e leitor privado.
 - Salas de oito caracteres e atualização de estado quase imediata por WebSocket.
-- Upload de até 30 arquivos do manual (PDF ou fotografias), interpretação em lotes de até 12 arquivos por IA (opcional), edição e confirmação humana.
+- Upload de até 30 arquivos do manual (PDF ou fotografias), processamento local e envio incremental de texto/visuais necessários, cache e confirmação humana.
 - Regras, ações, fase, turno, variáveis, notas e histórico salvos em JSON no armazenamento privado Android.
 - **Câmera nativa secundária** com prévia e captura do tabuleiro a cada 5 segundos, sem mover o tripé.
 - **Leitor privado nativo** com botão de captura individual: imagem e interpretação permanecem fora do estado público. As descrições das cartas residem somente na RAM da instância do servidor e são perdidas quando o processo morre.
@@ -79,7 +79,7 @@ O mesmo procedimento funciona usando o **hotspot do controlador**, desde que os 
 
 ## IA (opcional)
 
-Com o servidor iniciado no controlador, toque em **IA** na barra superior. Digite a chave e salve. A chave fica em `SharedPreferences` privadas do aplicativo (não é exportada para a interface web); ao habilitar IA, a API recebe regras, fotos, cartas privadas e contexto de partida, de acordo com a operação solicitada. Esse recurso requer internet, gera custos de API e **não é IA offline**. Não compartilhe o controlador com pessoas que não devam usar essa chave.
+Com o servidor iniciado no controlador, toque em **IA** na barra superior. Digite a chave e salve. A chave é criptografada com Android Keystore e persistida nas preferências privadas (não é exportada para a interface web); ao habilitar IA, a API recebe regras, fotos, cartas privadas e contexto de partida, de acordo com a operação solicitada. Esse recurso requer internet, gera custos de API e **não é IA offline**. Não compartilhe o controlador com pessoas que não devam usar essa chave.
 
 Sem IA: manual, regras editáveis, câmera, salas, histórico, sincronização, jogadas manuais e voz continuam utilizáveis. Leitura/entendimento de cartas ocultas e sugestões inteligentes ficam indisponíveis.
 
@@ -90,9 +90,9 @@ Sem IA: manual, regras editáveis, câmera, salas, histórico, sincronização, 
 - O processo servidor vive enquanto o app controlador estiver ativo; **não há serviço foreground permanente**. Android pode suspender/encerrar o processo quando o aplicativo sair do primeiro plano ou sofrer restrições de bateria. Mantenha controlador e câmera com telas ativas.
 - Capturas nativas de câmera têm prévia somente no aparelho satélite. Em navegador, `getUserMedia()` exige HTTPS em endereço LAN; use o APK para automação ou o upload manual por arquivo.
 - O reconhecimento visual ainda é assistido. A IA não garante movimento legal, não possui engine universal de regras e pode cometer erros.
-- Chave OpenAI salva nas preferências privadas **sem criptografia adicional via Android Keystore** neste MVP. O aplicativo desabilita backup, mas não afirma segurança de um cofre criptográfico.
+- Chave OpenAI protegida com AES-GCM e Android Keystore; preferências antigas são migradas. Backup permanece desabilitado.
 - Leitura de cartas em RAM é apagada quando o servidor é encerrado; estado público/regras/histórico persistem em arquivos privados do app.
-- A leitura de manuais com IA em lotes pode perder referências cruzadas. Revise tudo antes de jogar.
+- A leitura de manuais mantém referências e lacunas explícitas, mas a interpretação da IA ainda exige revisão humana.
 
 ## Estrutura
 
@@ -110,9 +110,6 @@ app/src/main/AndroidManifest.xml
 .github/workflows/android-apk.yml
 ```
 
-## Verificações neste ambiente
+## Validação do pipeline PDF
 
-- `node --check app/src/main/assets/web/app.js` — sintaxe JS validada.
-- Arquivos JSON Schema analisados por testes estáticos.
-- `javac` analisou a gramática dos arquivos Java sem apontar erro de sintaxe, **mas não pode compilar** sem `android.jar` e classes do SDK Android.
-- **Não houve compilação APK, instalação ou teste em celulares.** O build em Android Studio/CI poderá identificar problemas de integração adicionais.
+Veja [VALIDATION.md](docs/VALIDATION.md) para os comandos executados, resultados, medições e limites da validação. Os testes de transporte usam API simulada; não se deve confundir seus tokens com consumo faturado pela OpenAI.

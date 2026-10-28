@@ -89,7 +89,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             if (!isLocal(value)) { toast("Conecte somente a um IP de rede privada."); return; }
             host=value;showWeb("http://"+host+":"+LanServer.PORT, false);
         });
-        TextView footer=title("Versão Android 0.2 alpha · Hospedagem no controlador · Sem nuvem para sincronização",12);
+        TextView footer=title("Versão Android 0.3 alpha · Hospedagem no controlador · Sem nuvem para sincronização",12);
         footer.setTextColor(0xffa3aec2);footer.setPadding(0,dp(36),0,0);layout.addView(footer);
         setContentView(scroll);
     }
@@ -118,7 +118,7 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
             TextView address=title("Cliente: "+host,13);toolbar.addView(address,new LinearLayout.LayoutParams(0,dp(48),1));
         }
         Button back=button("Sair");toolbar.addView(back);
-        back.setOnClickListener(v -> {if(server!=null && server.isRunning()) server.stop();if(web!=null){web.destroy();web=null;}showStart();});
+        back.setOnClickListener(v -> {if(server!=null && server.isRunning()) server.stop();server=null;if(web!=null){web.destroy();web=null;}showStart();});
         web=new WebView(this);
         WebSettings settings=web.getSettings();
         settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
@@ -140,9 +140,13 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
                 if(selectedPhotos!=null)selectedPhotos.onReceiveValue(null);
                 selectedPhotos=callback;
                 try {
-                    Intent pick=new Intent(Intent.ACTION_GET_CONTENT);pick.setType("image/*");
+                    Intent pick=new Intent(Intent.ACTION_GET_CONTENT);
+                    String[] accepted=params.getAcceptTypes();
+                    boolean manual=java.util.Arrays.stream(accepted).anyMatch(t -> t.contains("pdf"));
+                    pick.setType(manual?"*/*":"image/*");
+                    if(manual)pick.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","image/*"});
                     pick.addCategory(Intent.CATEGORY_OPENABLE);pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-                    startActivityForResult(Intent.createChooser(pick,"Selecionar fotos do manual"),PICK_IMAGES);
+                    startActivityForResult(Intent.createChooser(pick,"Selecionar manual ou fotografia"),PICK_IMAGES);
                     return true;
                 } catch(Exception e) {selectedPhotos=null;callback.onReceiveValue(null);return true;}
             }
@@ -168,12 +172,12 @@ public class MainActivity extends Activity implements TextToSpeech.OnInitListene
         key.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
         key.setPadding(dp(24),dp(18),dp(24),dp(12));
         new AlertDialog.Builder(this).setTitle("Chave OpenAI (opcional)")
-            .setMessage("A chave permanece nas preferências privadas do controlador. Ao usar IA, textos e imagens são enviados à API OpenAI; isso não funciona offline.")
+            .setMessage("A chave é criptografada com Android Keystore no controlador. Ao usar IA, textos e imagens são enviados à API OpenAI; isso não funciona offline.")
             .setView(key).setNegativeButton("Cancelar",null)
             .setNeutralButton("Apagar chave",(d,w)->{
-                getSharedPreferences("private_settings",0).edit().remove("api_key").apply();toast("Chave apagada.");})
+                new ApiKeyStore(this).clear();toast("Chave apagada.");})
             .setPositiveButton("Salvar",(d,w)->{
-                getSharedPreferences("private_settings",0).edit().putString("api_key",key.getText().toString().trim()).apply();
+                new ApiKeyStore(this).save(key.getText().toString().trim());
                 toast("Configuração de IA salva no controlador.");if(web!=null)web.reload();
             }).show();
     }

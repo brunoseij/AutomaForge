@@ -94,38 +94,36 @@ final class AiClient {
     }
 
     JSONObject rules(String name, List<RuleFile> files) throws Exception {
-        return ask("Leia SOMENTE estas páginas ou documentos de manual de jogo de tabuleiro. Nome informado: " + name +
-            ". Responda em português. Extraia regras aplicáveis a um adversário artificial, configuração e fluxo de turnos; " +
-            "ações baseadas em regras, com condições. Não invente conteúdo ausente. Se o manual não tiver modo solo, " +
-            "as ações são hipóteses de emulação de jogador. Informe incertezas. Leia as páginas na ordem enviada.", "rules", files);
+        return ask(AiPrompts.rules(name), "rules", files);
     }
 
     JSONObject board(JSONObject room, byte[] photo) throws Exception {
-        return ask("Analise o tabuleiro com cautela. Descreva somente o visível e possíveis mudanças, sem assumir elementos ocultos. " +
-            "Não modifique o estado da partida. Responda em português. Regras: " +
-            GameStore.clip(room.optString("rules_text"), 16000) + " Estado: " +
-            GameStore.obj("turn",room.optInt("turn"), "phase",room.optString("phase"),
-                "variables",room.optJSONObject("variables")).toString(), "board", java.util.Collections.singletonList(RuleFile.image(photo)));
+        String state = GameStore.obj("turn", room.optInt("turn"), "phase", room.optString("phase"),
+            "variables", room.optJSONObject("variables")).toString();
+        return ask(AiPrompts.board(room.optString("rules_text"), state), "board",
+            java.util.Collections.singletonList(RuleFile.image(photo)));
     }
 
     JSONObject privateCard(JSONObject room, byte[] photo) throws Exception {
-        return ask("Leia esta carta privada da automa. Responda em português e descreva somente o conteúdo realmente legível. " +
-            "Não invente texto. A leitura é exclusiva da automa, não deve ser mostrada ao jogador. Regras: " +
-            GameStore.clip(room.optString("rules_text"), 10000), "card", java.util.Collections.singletonList(RuleFile.image(photo)));
+        return ask(AiPrompts.privateCard(room.optString("rules_text")), "card",
+            java.util.Collections.singletonList(RuleFile.image(photo)));
     }
 
     JSONObject propose(JSONObject room, JSONArray privateCards) throws Exception {
-        JSONObject context = new JSONObject(room.toString());
-        context.remove("rule_pages"); context.remove("rules_draft");
-        context.remove("history");
-        context.put("recent_history", tail(room.optJSONArray("history"), 8));
+        JSONObject context = GameStore.obj(
+            "game_name", room.optString("game_name"),
+            "rules_text", room.optString("rules_text"),
+            "setup", room.optString("setup"),
+            "turn_flow", room.optString("turn_flow"),
+            "actions", room.optJSONArray("actions"),
+            "uncertainties", room.optJSONArray("uncertainties"),
+            "turn", room.optInt("turn"),
+            "phase", room.optString("phase"),
+            "variables", room.optJSONObject("variables"),
+            "board_notes", room.optString("board_notes"),
+            "recent_history", tail(room.optJSONArray("history"), 8));
         context.put("private_cards_ONLY_FOR_AI", privateCards);
-        return ask("Você é o adversário artificial do jogo. Escolha exatamente uma ação pelo NOME da lista de ações permitidas, " +
-            "sem inventar movimentos ou condições. Considere o contexto e as cartas privadas apenas para decidir, " +
-            "NUNCA revele seu conteúdo em spoken, reason ou player_steps. Fale naturalmente em português na primeira pessoa. " +
-            "Estado incerto significa confiança baixa; se for incerto, não proponha mudanças de estado. " +
-            "Jogadas sempre passam por aprovação humana. Contexto: " + GameStore.clip(context.toString(), 30000),
-            "proposal", null);
+        return ask(AiPrompts.proposal(context.toString()), "proposal", null);
     }
 
     private static JSONArray tail(JSONArray all, int count) {

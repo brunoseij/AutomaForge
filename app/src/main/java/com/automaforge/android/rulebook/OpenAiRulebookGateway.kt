@@ -114,6 +114,16 @@ class OpenAiRulebookGateway(private val context: Context,
 /** Runtime validation as well as strict output on the server. Supports the subset used in our schemas. */
 object RuleJsonValidator {
     fun validate(value: Any, schema: JSONObject) {
+        val rawType=schema.get("type")
+        if(rawType is JSONArray) {
+            require((0 until rawType.length()).any { index ->
+                runCatching { validate(value,JSONObject(schema.toString()).put("type",rawType.getString(index))) }.isSuccess
+            }) { "Tipo fora da união permitida" }
+            return
+        }
+        schema.optJSONArray("enum")?.let { choices ->
+            require((0 until choices.length()).any { choices.get(it)==value }) { "Valor fora das escolhas permitidas" }
+        }
         when(schema.getString("type")) {
             "object" -> {
                 require(value is JSONObject)
@@ -126,6 +136,7 @@ object RuleJsonValidator {
             "string" -> require(value is String)
             "integer" -> require(value is Number && value.toDouble()==value.toLong().toDouble())
             "boolean" -> require(value is Boolean)
+            "number" -> require(value is Number && value.toDouble().isFinite())
             else -> error("Tipo de esquema não suportado")
         }
     }

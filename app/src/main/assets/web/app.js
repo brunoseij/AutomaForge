@@ -113,13 +113,14 @@
     return active && $(formId).contains(active) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
   }
   function parseActions(text) {
+    if (text.trim().startsWith("[")) return JSON.parse(text);
     return text.split(/\r?\n/).map(line => {
       const parts = line.split('|').map(x => x.trim());
       return {name: parts[0], description: parts[1] || '', precondition: parts.slice(2).join('|') || ''};
     }).filter(x => x.name);
   }
   function actionLines(actions) {
-    return (actions || []).map(a => [a.name, a.description || '', a.precondition || ''].join(' | ')).join('\n');
+    return JSON.stringify(actions || [], null, 2);
   }
   function fillRules(src) {
     $('rulesReviewed').checked = false;
@@ -169,8 +170,10 @@
     if (!formIsBeingEdited('rulesForm')) fillRules(data.rules_draft || data);
     if (!formIsBeingEdited('stateForm')) fillState(data);
     if (oldActions !== JSON.stringify(data.actions) || !$('manualAction').options.length) fillManualActions();
-    renderDraft(); renderProposal(); renderHistory(); renderObservation();
+    renderDraft(); renderProposal(); renderHistory(); renderObservation(); renderStructuredState();
     refreshBoard(data.board_version);
+    $('freezeBoard').textContent=data.board_frozen?'Liberar captura de nova foto':'Congelar foto para revisão';
+    $('boardAge').textContent=`Foto ${data.board_version||0}${data.board_frozen?' · congelada':''}`;
     const announcement = data.last_announcement;
     if (!observedFirstAnnouncement) {
       observedFirstAnnouncement = true;
@@ -194,20 +197,93 @@
       `<strong>Pontos a verificar:</strong><ul>${(room.rules_draft.uncertainties || []).map(u => `<li>${esc(u)}</li>`).join('') || '<li>Sem dúvidas indicadas; ainda é necessária a revisão humana.</li>'}</ul>`;
   }
   function renderProposal() {
-    const el = $('proposalArea');
-    const p = room.proposal;
-    if (!p) { el.className = 'proposal-empty'; el.textContent = 'Nenhuma jogada pendente.'; return; }
-    el.className = 'proposal';
-    el.innerHTML = `<div class="eyebrow">AGUARDANDO SUA APROVAÇÃO</div><h3>${esc(p.action)}</h3>` +
-      `<p><strong>Fala:</strong> “${esc(p.spoken)}”</p><p><strong>Justificativa:</strong> ${esc(p.reason)}</p>` +
-      (p.player_steps.length ? `<strong>Como executar:</strong><ol>${p.player_steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>` : '') +
-      (p.state_changes.length ? `<p><strong>Alterações propostas:</strong> ${esc(p.state_changes.map(x => x.key + ' = ' + x.value).join('; '))}</p>` : '') +
-      (p.uncertainties.length ? `<p class="risk"><strong>Verifique:</strong> ${esc(p.uncertainties.join('; '))}</p>` : '') +
-      `<p class="hint">Confiança declarada: ${esc(p.confidence)}. Não significa validação formal das regras.</p>` +
-      `<div class="button-row"><button class="primary" id="confirmProposal">Confirmar e anunciar</button><button class="secondary" id="rejectProposal">Rejeitar</button></div>`;
-    $('confirmProposal').addEventListener('click', run(async () => { await request(api('/automa/confirm'), {method:'POST'}); toast('Jogada aprovada.'); }));
-    $('rejectProposal').addEventListener('click', run(async () => { await request(api('/automa/reject'), {method:'POST'}); toast('Jogada descartada.'); }));
+    const el = $('proposalArea'), p = room.proposal;
+    if (!p) {
+      el.className = 'proposal-empty';
+      const d=room.decision;
+      el.innerHTML=d ? `<strong>${esc(d.status)}</strong><p>${esc(d.message)}</p>`+
+        `<ul>${(d.needed_data||[]).map(n=>`<li>Confirme ${esc(n.entity||'estado/cobertura')}: ${esc(n.field)}</li>`).join('')}${(d.errors||[]).map(e=>`<li>${esc(e)}</li>`).join('')}</ul>` : 'Nenhuma jogada pendente.';
+      return;
+    }
+    const v=p.validation||{status:'unverifiable',errors:[],missing:['Proposta antiga. Solicite nova análise.']};
+    const stale=p.state_id!==room.game_state.id||p.state_version!==room.game_state.version||p.rules_revision!==(room.rules_revision||0);
+    const approved=p.execution_status==='approved';
+    el.className='proposal';
+    el.innerHTML=`<div class="eyebrow">${stale?'PROPOSTA DESATUALIZADA':approved?'APROVADA · EXECUÇÃO A CONFIRMAR':'PROPOSTA · REVISÃO HUMANA'}</div><h3>${esc(p.action)}</h3>`+
+      `<p>Estado ${esc(p.state_version)} · ${esc(p.player)} · ${esc(p.phase)} / ${esc(p.substep)}</p>`+
+      `<strong>Verificação local: ${esc(v.status)}</strong><ul>${[...(v.errors||[]),...(v.missing||[])].map(e=>`<li>${esc(e)}</li>`).join('')}</ul>`+
+      `<ol>${(p.player_steps||[]).map((s,i)=>`<li><button type="button" class="text-button moveReference" data-index="${i}">${esc(s)}</button></li>`).join('')}</ol>`+
+      `<p><strong>Justificativa:</strong> ${esc(p.reason)}</p>`+
+      (!approved&&!stale&&v.status!=='invalid'?`${v.status==='unverifiable'?'<label><input type="checkbox" id="ackUnverified"> Conferi pessoalmente as regras/dados que o aplicativo não verifica.</label>':''}<button class="primary" id="confirmProposal">Aprovar proposta e anunciar</button>`:'')+
+      (approved&&!stale?`<label for="completedMoves">Quantos movimentos iniciais foram realmente executados?</label><input id="completedMoves" type="number" min="0" max="${p.moves.length}" value="${p.moves.length}"><button class="primary" id="executedProposal">Confirmar execução física (total ou parcial)</button>`:'')+
+      `<button class="secondary" id="rejectProposal">Descartar proposta</button><p class="hint">Aprovar não altera o tabuleiro. Após execução parcial, o restante será recalculado a partir do estado atualizado. Se houve execução diferente, corrija o estado manualmente.</p>`;
+    document.querySelectorAll('.moveReference').forEach(b=>b.addEventListener('click',()=>highlightMove(p.moves[Number(b.dataset.index)])));
+    $('confirmProposal')?.addEventListener('click',run(async()=>{receiveState(await request(api('/automa/confirm'),{method:'POST',json:{proposal_id:p.id,acknowledge_unverified:!!$('ackUnverified')?.checked}}));toast('Proposta aprovada; confirme a execução depois de mover os componentes.');}));
+    $('executedProposal')?.addEventListener('click',run(async()=>{receiveState(await request(api('/automa/executed'),{method:'POST',json:{proposal_id:p.id,completed_moves:Number($('completedMoves').value)}}));toast('Execução registrada. Confira o estado antes da próxima decisão.');}));
+    $('rejectProposal').addEventListener('click',run(async()=>{receiveState(await request(api('/automa/reject'),{method:'POST',json:{proposal_id:p.id}}));}));
   }
+  function editorState() { return JSON.parse($('structuredState').value); }
+  function renderStructuredState() {
+    const s=room.game_state;
+    $('stateVersion').textContent=`Estado ${s.id} · versão ${s.version}. Jogador: ${s.active_player||'desconhecido'} · subetapa: ${s.substep||'não informada'}`;
+    if(document.activeElement!==$('structuredState')&&!$('structuredState').dataset.dirty) $('structuredState').value=JSON.stringify(s,null,2);
+    const positions=s.entities.filter(e=>['position','group'].includes(e.kind));
+    const selected=$('calibrationPosition').value;
+    $('calibrationPosition').innerHTML='<option value="">Selecione uma posição</option>'+positions.map(e=>`<option value="${esc(e.id)}">${esc(e.id)} · ${esc(e.owner||'compartilhado')}</option>`).join('');
+    $('calibrationPosition').value=selected;
+    $('boardReferences').innerHTML=positions.map(e=>`<button class="secondary small" type="button" data-position="${esc(e.id)}">${esc(e.id)} · ${esc(e.status)} · topo ${Math.max(0,...s.entities.filter(c=>c.location===e.id&&c.quantity>0).map(c=>c.level||0))}</button>`).join('');
+    $('boardReferences').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>highlightIds([b.dataset.position])));
+    drawMarkers(s);
+  }
+  function drawMarkers(s,ids=[]) {
+    document.querySelectorAll('.board-marker').forEach(e=>e.remove());
+    if(!s)return;
+    s.entities.filter(e=>['position','group'].includes(e.kind)&&Number.isFinite(e.x)&&Number.isFinite(e.y)&&e.x>=0&&e.x<=1&&e.y>=0&&e.y<=1&&e.image_version===room.board_version).forEach(e=>{
+      const b=document.createElement('button');b.type='button';b.className='board-marker'+(ids.includes(e.id)?' highlighted':'');b.textContent=e.id;
+      b.style.left=`${100*e.x}%`;b.style.top=`${100*e.y}%`;b.title=e.id+' · '+e.status;
+      b.addEventListener('click',ev=>{ev.stopPropagation();$('calibrationPosition').value=e.id;});$('boardFrame').appendChild(b);
+    });
+  }
+  function highlightIds(ids) { drawMarkers(room.game_state,ids);$('boardFrame').scrollIntoView({behavior:'smooth',block:'center'}); }
+  function highlightMove(m) { highlightIds([m.source,m.destination]); }
+  $('addStateEntity').addEventListener('click',run(async()=>{
+    const s=editorState(),kind=$('newEntityKind').value;
+    let n=1;while(s.entities.some(e=>e.id===`${kind}-${n}`))n++;
+    s.entities.push({id:`${kind}-${n}`,kind,type:'',owner:'',visibility:'public',location:'',group:'',quantity:0,level:0,
+      identity:kind==='component'?'pooled':'not_applicable',status:'unknown',source:'human',occupancy_known:false,
+      topology:'none',neighbors:[],attributes:[],x:-1,y:-1});
+    $('structuredState').value=JSON.stringify(s,null,2);$('structuredState').dataset.dirty='yes';
+    toast('Entidade adicionada. Preencha localização, tipo, quantidade e situação antes de confirmar.');
+  }));
+  $('structuredState').addEventListener('input' ,()=>{$('structuredState').dataset.dirty='yes';});
+  $('boardImage').addEventListener('click',event=>{
+    const id=$('calibrationPosition').value;if(!id)return toast('Selecione uma posição para calibrar.',true);
+    try {
+      const s=editorState(),e=s.entities.find(e=>e.id===id),rect=event.currentTarget.getBoundingClientRect();
+      if(!e)throw new Error('Posição não encontrada no editor.');
+      e.x=(event.clientX-rect.left)/rect.width;e.y=(event.clientY-rect.top)/rect.height;
+      e.image_version=room.board_version;e.source='human_calibration';
+      $('structuredState').value=JSON.stringify(s,null,2);$('structuredState').dataset.dirty='yes';drawMarkers(s);
+      toast('Referência marcada. Confirme o estado corrigido para salvar.');
+    }catch(error){toast(error.message,true);}
+  });
+  $('saveStructuredState').addEventListener('click',run(async()=>{
+    const data=await request(api('/state/structured'),{method:'PUT',json:editorState()});
+    delete $('structuredState').dataset.dirty;receiveState(data);toast('Estado público confirmado.');
+  }));
+  $('reviewObservation').addEventListener('click',run(async()=>{
+    const o=room.board_observation;if(!o)throw new Error('Analise uma imagem primeiro.');
+    if(o.photo_version!==room.board_version||o.state_version!==room.game_state.version)throw new Error('Análise desatualizada. Capture/analise novamente.');
+    const s=editorState(),conflicts=[];
+    for(const e of o.entities||[]) {
+      const existing=s.entities.find(x=>x.id===e.id);
+      const anchor=s.entities.find(x=>x.kind===e.kind&&x.type===e.type&&x.location===e.location&&x.group===e.group&&x.level===e.level&&e.identity==='pooled');
+      if(existing||anchor){conflicts.push(e.id);continue;}
+      s.entities.push({...e});
+    }
+    $('structuredState').value=JSON.stringify(s,null,2);$('structuredState').dataset.dirty='yes';
+    $('stateEditorHelp').textContent=`Candidatos adicionados para conferência. Entidades preservadas que precisam de comparação manual: ${conflicts.join(', ')||'nenhuma'}. Confira a observação abaixo e confirme somente após revisar.`;
+  }));
   function renderHistory() {
     const el = $('historyArea');
     if (!room.history.length) { el.innerHTML = 'Sem jogadas aprovadas.'; return; }
@@ -215,11 +291,12 @@
       `<div class="history-entry"><span class="history-turn"># ${esc(h.turn)}</span><div><strong>${esc(h.action)}</strong><p>${esc(h.spoken)}</p></div></div>`).join('');
   }
   function renderObservation() {
-    const o = room.board_observation;
-    $('observationArea').innerHTML = !o ? 'A análise visual é opcional e deve ser conferida.' :
-      `<strong>Observações:</strong><ul>${o.observations.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` +
-      `<strong>Possíveis alterações:</strong><ul>${o.possible_changes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` +
-      `<strong>Dúvidas:</strong><ul>${o.uncertainties.map(x => `<li>${esc(x)}</li>`).join('') || '<li>Nenhuma sinalizada.</li>'}</ul>`;
+    const o=room.board_observation;
+    $('observationArea').innerHTML=!o?'Analise uma foto pública ou informe o estado manualmente.':
+      `<strong>Foto ${esc(o.photo_version)} · ${o.photo_version!==room.board_version||o.state_version!==room.game_state.version?'ANÁLISE DESATUALIZADA':'candidatos, ainda não confirmados'}</strong>`+
+      `<p>${o.sufficient?'IA declarou cobertura suficiente; exige conferência.':'Foto insuficiente: revise cobertura, oclusões, pilhas e calibração.'}</p>`+
+      `<ul>${[...(o.observations||[]),...(o.uncertainties||[]),...(o.conflicts||[])].map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`+
+      `<details><summary>Comparar entidades reconhecidas</summary><pre>${esc(JSON.stringify(o.entities||[],null,2))}</pre></details>`;
   }
   async function photoBlob(videoId) {
     const video = $(videoId);
@@ -372,11 +449,11 @@
   $('toggleManual').addEventListener('click', () => $('manualProposalForm').classList.toggle('hidden'));
   $('manualProposalForm').addEventListener('submit', run(async () => {
     if (!$('manualAction').value) throw new Error('Cadastre uma ação na configuração de regras.');
-    await request(api('/automa/manual'), {method:'POST', json:{action:$('manualAction').value,
-      spoken:$('manualSpeech').value || `Vou realizar a ação ${$('manualAction').value}.`,
-      reason:'Ação configurada e selecionada manualmente pelo controlador.',
-      player_steps:$('manualSteps').value.split(/\r?\n/).filter(Boolean),
-      state_changes:[], uncertainties:[], confidence:'media'}});
+    await request(api('/automa/manual'), {method:'POST', json:{status:'proposed',state_id:room.game_state.id,
+      state_version:room.game_state.version,rules_revision:room.rules_revision||0,player:room.game_state.active_player,
+      phase:room.game_state.phase,substep:room.game_state.substep,action:$('manualAction').value,
+      reason:'Jogada informada pelo controlador.',parameters:JSON.parse($('manualParameters').value),
+      moves:JSON.parse($('manualSteps').value),needed_data:[]}});
     $('manualProposalForm').classList.add('hidden'); toast('Jogada manual pronta para confirmação.');
   }));
   $('voiceEnabled').addEventListener('change', () => {
@@ -391,6 +468,9 @@
     if (!$('voiceEnabled').checked) return toast('Ative “Falar as ações” antes de repetir.', true);
     speak(room.last_announcement.text);
   });
+  $('freezeBoard').addEventListener('click',run(async()=>{
+    receiveState(await request(api('/board/freeze'),{method:'POST',json:{frozen:!room.board_frozen}}));
+  }));
   $('analyzeBoard').addEventListener('click', run(async () => {
     await request(api('/board/analyze'), {method:'POST'});
     toast('Análise registrada; confira as observações.');

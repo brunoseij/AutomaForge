@@ -1,1 +1,139 @@
-{"type": "object", "properties": {"action": {"type": "string"}, "reason": {"type": "string"}, "spoken": {"type": "string"}, "player_steps": {"type": "array", "items": {"type": "string"}}, "state_changes": {"type": "array", "items": {"type": "object", "properties": {"key": {"type": "string"}, "value": {"type": "string"}}, "required": ["key", "value"], "additionalProperties": false}}, "uncertainties": {"type": "array", "items": {"type": "string"}}, "confidence": {"type": "string", "enum": ["baixa", "media", "alta"]}}, "required": ["action", "reason", "spoken", "player_steps", "state_changes", "uncertainties", "confidence"], "additionalProperties": false}
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "proposed",
+        "needs_data",
+        "no_legal_move",
+        "analysis_error"
+      ]
+    },
+    "state_id": {
+      "type": "string"
+    },
+    "state_version": {
+      "type": "integer"
+    },
+    "rules_revision": {
+      "type": "integer"
+    },
+    "player": {
+      "type": "string"
+    },
+    "phase": {
+      "type": "string"
+    },
+    "substep": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "string",
+              "integer",
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "moves": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "select",
+              "transfer",
+              "choose"
+            ]
+          },
+          "component": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "choice_parameter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "component",
+          "source",
+          "destination",
+          "quantity",
+          "level",
+          "choice_parameter"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "needed_data": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "field"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "state_id",
+    "state_version",
+    "rules_revision",
+    "player",
+    "phase",
+    "substep",
+    "action",
+    "parameters",
+    "moves",
+    "needed_data",
+    "reason"
+  ],
+  "additionalProperties": false
+}

@@ -1,1 +1,195 @@
-{"type": "object", "properties": {"game_name": {"type": "string"}, "rules_text": {"type": "string"}, "setup": {"type": "string"}, "turn_flow": {"type": "string"}, "actions": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "description": {"type": "string"}, "precondition": {"type": "string"}}, "required": ["name", "description", "precondition"], "additionalProperties": false}}, "uncertainties": {"type": "array", "items": {"type": "string"}}}, "required": ["game_name", "rules_text", "setup", "turn_flow", "actions", "uncertainties"], "additionalProperties": false}
+{
+  "type": "object",
+  "properties": {
+    "game_name": {
+      "type": "string"
+    },
+    "rules_text": {
+      "type": "string"
+    },
+    "setup": {
+      "type": "string"
+    },
+    "turn_flow": {
+      "type": "string"
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "precondition": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "string",
+                    "integer",
+                    "boolean"
+                  ]
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "type",
+                "required",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "select",
+                "transfer",
+                "choose"
+              ]
+            }
+          },
+          "min_moves": {
+            "type": "integer"
+          },
+          "max_moves": {
+            "type": "integer"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "player": {
+            "type": "string"
+          },
+          "required_state": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rule_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reviewed": {
+            "type": "boolean"
+          },
+          "validation_complete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "precondition",
+          "parameters",
+          "sources",
+          "destinations",
+          "operations",
+          "min_moves",
+          "max_moves",
+          "phase",
+          "player",
+          "required_state",
+          "constraints",
+          "effects",
+          "rule_refs",
+          "reviewed",
+          "validation_complete"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "game_name",
+    "rules_text",
+    "setup",
+    "turn_flow",
+    "actions",
+    "uncertainties"
+  ],
+  "additionalProperties": false
+}

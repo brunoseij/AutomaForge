@@ -16,7 +16,7 @@ def test_js_syntax():
 def test_all_dom_ids_are_defined():
     js = (ASSETS/'web/app.js').read_text()
     html = (ASSETS/'web/index.html').read_text()
-    dynamic = {'confirmProposal', 'rejectProposal'}
+    dynamic = {'confirmProposal', 'rejectProposal', 'ackUnverified', 'completedMoves', 'executedProposal'}
     ids = set(re.findall(r"\$\(['\"]([A-Za-z][\w-]*)['\"]\)", js))
     missing = {x for x in ids if f'id="{x}"' not in html and x not in dynamic}
     assert not missing, f'Undefined HTML id(s): {missing}'

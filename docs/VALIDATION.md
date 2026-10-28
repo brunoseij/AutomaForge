@@ -1,51 +1,29 @@
-# Validação — pipeline PDF
+# Verificações — 0.4.0-alpha
 
-## Verificações executadas
+## Resultado local desta entrega
 
-- Build Android debug e APK dos testes instrumentados compilados com JDK 17, Gradle 8.7 e Android SDK 35. A execução final de testes JVM, lint e compilação terminou com `BUILD SUCCESSFUL`.
-- Assinatura do APK verificada por `apksigner verify`: válida (v2). Metadados verificados: `com.automaforge.android.debug`, versão 0.3.0-alpha, minSdk 26 e targetSdk 35.
-- `:app:testDebugUnitTest`: 26 testes passaram, incluindo recuperação de backup atômico e proteção contra repetição após dano no cache remoto.
-- Sete contratos estáticos passaram, incluindo sintaxe JS, IDs da interface, rotas, esquemas existentes e preservação das cartas privadas.
-- `:app:lintDebug`: zero erros e 13 avisos (principalmente internacionalização e APIs legadas existentes).
-- `git diff --check`: sem erros.
+- JDK 17, Gradle 8.7 e SDK Android 35: `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug --offline --no-daemon` terminaram com **BUILD SUCCESSFUL**.
+- **52 testes JVM**, zero falhas/erros/ignorados: 20 testes de estado/validação/simulação, 6 testes do ciclo de proposta no dispatcher LAN, 26 regressões do pipeline de manuais.
+- **7 contratos estáticos** passaram: sintaxe JavaScript, IDs da interface, esquemas, rotas, PDF, isolamento das cartas privadas e câmera/build existentes.
+- Lint: **zero erros, 13 avisos**. Os avisos restantes são de internacionalização, APIs antigas e configurações existentes; não foram apresentados como erros funcionais resolvidos.
+- `git diff --check`: sem erros. Inspeção confirmou ausência de testes instrumentados, dependências exclusivas e job de emulador. As variantes instrumentadas estão desabilitadas no Gradle.
+- APK: `com.automaforge.android.debug`, versionCode 4, versionName 0.4.0-alpha, minSdk 26, targetSdk 35. Assinatura v2 verificada com `apksigner verify`.
+- Nenhuma instrução ou condição específica de Harmonies existe em `app/src/main`.
 
-## Testes em Android
+## O que os dados simulados cobrem
 
-Há oito testes instrumentados: PDF nativo/cache, OCR digitalizado, documento híbrido, página vazia, recursos visuais, interrupção/retomada, servidor LAN durante processamento e migração/criptografia da chave. Eles exercitam PdfRenderer e ML Kit reais, sem chamadas à OpenAI.
+Estado completo com lotes, grupos, casas e níveis; oferta desconhecida; ocupação não confirmada; componente inferido; correção humana preservada após análise candidata; duplicação de lotes; correção concorrente; formato/enumeração inválidos; intenção genérica; escolha textual vaga; parâmetros obrigatórios; peça/destino inexistentes; jogador/fase incorretos; versão antiga do estado/regras; seleção prévia; vizinhança hexagonal axial; simulação sequencial de níveis e mudança de localização; ausência de validador; migração e persistência de sala antiga; rejeição de informação privada no estado público.
 
-A primeira execução local em emulador sem KVM falhou antes de instalar o APK: `cmd: Can't find service: package`. Nenhum teste instrumentado chegou a executar nessa tentativa. A segunda tentativa inicializou o gerenciador de pacotes, mas o Android reiniciou durante a instalação: `Failure calling service package: Broken pipe (32)` / `DeadSystemException`. Novamente, nenhum teste instrumentado chegou a executar. O ambiente não possui `/dev/kvm`; o emulador estava em execução por software. O workflow incluído configura execuções aceleradas nas APIs 26 e 30, mas elas **não foram disparadas**, pois a integração do GitHub recusou escrita com HTTP 403. OCR real, Keystore real e concorrência LAN em Android permanecem pendentes de validação no aparelho/CI.
+Os testes do dispatcher usam Robolectric na JVM, sem abrir navegador, interface Android ou dispositivo. Conferem que aprovar não executa, execução exige aprovação, prefixo parcial altera somente o realizado, execução total usa a simulação, correção torna a proposta antiga inaprovável e a rota manual recusa ação sem movimentos. Não são testes instrumentados nem testes automatizados de interface.
 
-## Transporte e integridade
+As regressões de PDF usam documentos sintéticos e MockWebServer. Respostas, chamadas e tokens simulados não demonstram qualidade ou custo da API real. Testar esquemas e lógica de observações não demonstra capacidade visual do modelo.
 
-Os testes JVM usam PDFBox-Android real com Robolectric para texto nativo, digitalizado, híbrido, colunas, tabelas, diagramas, símbolos, página vazia, manual de 120 páginas e PDF corrompido. As verificações de integridade conferem condições, exceções, números, referências, ordem das colunas e relações das células das tabelas.
+## Não executado
 
-MockWebServer valida requisições textuais sem anexar o PDF, recuperação de imagem por ID e página, cache sem novas chamadas, cancelamento de rede, recusa de JSON inválido e confirmação de repetição após resultado desconhecido. A simulação não comprova a qualidade semântica de uma interpretação real da OpenAI.
+**Nenhum aparelho físico, emulador, Android instrumentation, automação de interface, fotografia real de partida ou chamada real à OpenAI foi usado nesta entrega.** Não há evidência de reconhecimento confiável de Harmonies ou de comportamento estratégico real. O usuário fará essa validação com o [roteiro manual](MANUAL_VALIDATION.md).
 
-## Medições locais com fixtures sintéticas
+Não há validação universal de regras. Restrições/efeitos sem implementação ficam explicitamente não verificáveis. Não há busca exaustiva que prove ausência de jogada legal. A correção e calibração são assistidas por JSON/toque, sem fusão automática multivisão, rastreamento visual universal ou estimativa de perspectiva. Uma imagem antiga reenviada pode não ser detectável como antiga; versões e hora de recepção apenas ajudam a identificar desatualização conhecida.
 
-| Fixture | Páginas | PDF original (bytes) | Texto nativo literal (bytes) |
-|---|---:|---:|---:|
-| Texto nativo | 2 | 2298 | 352 |
-| Duas colunas | 1 | 1486 | 149 |
-| Tabela | 1 | 1461 | 37 |
-| Diagramas | 1 | 1762 | 214 |
-| Símbolos | 1 | 1805 | 212 |
-| Extenso | 120 | 77432 | 21492 |
+## Código entregue
 
-Esses números medem **somente extração textual**. Imagens, metadados, JSON das requisições e consolidação não estão incluídos. Não representam economia total de bytes, tokens ou dinheiro. Nas fixtures de diagramas/símbolos, a parte visual continua recuperável e não pode ser substituída apenas pelo texto listado.
-
-Não houve chamada faturada à OpenAI, ensaio em aparelho físico ou medição financeira. Não há porcentagem universal de economia atribuída ao pipeline.
-
-## Publicação e aplicação das alterações
-
-O repositório foi lido a partir de `4e2a240302e5751c3af61624d999fbfcc9e997af`. A tentativa de criar o primeiro blob pelo GitHub retornou **403: Resource not accessible by integration**. Nenhuma alteração, branch ou PR foi publicado no remoto. O pacote de fontes e o patch contêm todas as alterações.
-
-Para aplicar o patch no checkout dessa base, com árvore de trabalho limpa:
-
-```bash
-git switch -c feat/local-rulebook-pipeline
-git apply --check /caminho/AutomaForge-Android-v0.3.patch
-git apply --index /caminho/AutomaForge-Android-v0.3.patch
-```
-
-Os relatórios brutos JVM/lint e a medição local estão na pasta `validation/` do ZIP de entrega. O APK é de debug, versão `0.3.0-alpha` (`versionCode=3`), para teste. A geração do APK não representa validação completa em aparelho.
+Trabalho realizado sobre a versão local 0.3, commit `12272c1`, preservando o pipeline de manuais anterior. A entrega inclui código completo e patch incremental sobre essa base. Nenhuma alteração foi publicada no repositório remoto nesta solicitação. Os relatórios brutos JVM, lint e build estão em `validation/` do pacote de fontes.

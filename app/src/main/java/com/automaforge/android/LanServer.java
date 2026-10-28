@@ -50,6 +50,7 @@ final class LanServer {
                 JSONObject room=store.get(code);
                 if(room.optInt("rules_revision")!=draft.optInt("base_rules_revision"))
                     throw new IllegalStateException("O manual ou as regras mudaram durante a análise. O resultado ficou no cache; retome com o conteúdo atual.");
+                JSONArray definitions=draft.optJSONArray("actions");if(definitions!=null)for(int i=0;i<definitions.length();i++)definitions.getJSONObject(i).put("reviewed",false).put("validation_complete",false);
                 room.put("rules_draft",draft);store.save(room,true);broadcast(code);
             } } catch(RuntimeException e) { throw e; }
             catch(Exception e) { throw new IllegalStateException("Não foi possível salvar o rascunho; os checkpoints foram preservados."); }
@@ -219,6 +220,7 @@ final class LanServer {
                 r.put("setup",body.optString("setup"));
                 r.put("turn_flow",body.optString("turn_flow"));
                 r.put("actions",normalizeActions(body.optJSONArray("actions")));
+                GameEngine.changed(r);
                 r.put("uncertainties",body.optJSONArray("uncertainties")!=null?body.optJSONArray("uncertainties"):new JSONArray());
                 rulebookJobs.saveValidated(manualFiles(code,r),body);
                 r.put("rules_revision",r.optInt("rules_revision")+1);
@@ -269,6 +271,12 @@ final class LanServer {
                 catch(IllegalArgumentException e) { throw new ApiException(409,e.getMessage()); }
             }
         }
+        if (method.equals("PUT") && rest.equals("/state/structured")) {
+            synchronized(store) {
+                JSONObject r=store.get(code);GameEngine.correct(r,req.json());store.save(r,true);broadcast(code);
+                return success(store.publicRoom(r));
+            }
+        }
         if (method.equals("PUT") && rest.equals("/state")) {
             JSONObject body=req.json();int turn=body.optInt("turn",0);
             if(turn<1 || turn>1000000)throw new ApiException(400,"Turno deve ser positivo.");
@@ -280,14 +288,21 @@ final class LanServer {
             synchronized(store) {
                 JSONObject r=store.get(code);r.put("turn",turn);r.put("phase",GameStore.clip(body.optString("phase"),140));
                 r.put("board_notes",GameStore.clip(body.optString("board_notes"),12000));r.put("variables",vars);
+                JSONObject state=GameEngine.state(r);state.put("turn",turn);state.put("phase",r.optString("phase"));GameEngine.changed(r);
                 store.save(r,true);broadcast(code);return success(store.publicRoom(r));
             }
+        }
+        if (method.equals("POST") && rest.equals("/board/freeze")) {
+            synchronized(store){JSONObject r=store.get(code);r.put("board_frozen",req.json().optBoolean("frozen"));store.save(r,false);broadcast(code);return success(store.publicRoom(r));}
         }
         if (method.equals("POST") && rest.equals("/board/photo")) {
             byte[] content=files(req).get(0).bytes;byte[] compressed=jpeg(content,1280);
             synchronized(store) {
-                JSONObject r=store.get(code);Files.write(store.boardPhoto(code).toPath(),compressed);
+                JSONObject r=store.get(code);
+                if(r.optBoolean("board_frozen"))return success(GameStore.obj("board_version",r.optInt("board_version"),"frozen",true));
+                Files.write(store.boardPhoto(code).toPath(),compressed);
                 int version=r.optInt("board_version")+1;r.put("board_version",version);
+                r.put("photo_at",GameStore.now());r.put("photo_state_version",GameEngine.state(r).getInt("version"));
                 store.save(r,false);broadcastEvent(code,GameStore.obj("type","board","board_version",version));
                 return success(GameStore.obj("board_version",version));
             }
@@ -300,11 +315,15 @@ final class LanServer {
             synchronized(store) {
                 JSONObject r=store.get(code);revision=r.optInt("revision");snapshot=new JSONObject(r.toString());
                 File file=store.boardPhoto(code);if(!file.exists())throw new ApiException(409,"Envie foto do tabuleiro.");
+                if(r.optInt("photo_state_version",-1)!=GameEngine.state(r).getInt("version"))throw new ApiException(409,"Foto anterior à atualização do estado. Libere a captura e envie uma foto atual.");
                 photo=Files.readAllBytes(file.toPath());
+                r.put("board_frozen",true);store.save(r,false);broadcast(code);
             }
             JSONObject observation=ai.board(snapshot,photo);
             synchronized(store) {
-                JSONObject r=store.get(code);if(r.optInt("revision")!=revision)throw new ApiException(409,"Estado mudou durante análise.");
+                JSONObject r=store.get(code);if(r.optInt("revision")!=revision||r.optInt("board_version")!=snapshot.optInt("board_version"))throw new ApiException(409,"Estado ou foto mudou durante análise; analise novamente.");
+                if(r.optInt("photo_state_version",-1)!=GameEngine.state(r).getInt("version"))throw new ApiException(409,"Foto anterior à atualização do estado. Capture uma foto atual.");
+                GameEngine.observation(r,observation,r.optInt("board_version"));
                 r.put("board_observation",observation);store.save(r,true);broadcast(code);return success(observation);
             }
         }
@@ -328,12 +347,12 @@ final class LanServer {
             synchronized(store) {store.clearPrivate(code);broadcast(code);return success(GameStore.obj("private_card_count",0));}
         }
         if (method.equals("POST") && rest.equals("/automa/manual")) {
-            JSONObject body=req.json();
             synchronized(store) {
-                JSONObject r=store.get(code);
-                if(!r.isNull("proposal"))throw new ApiException(409,"Resolva a jogada pendente.");
-                JSONObject proposal=validateProposal(body,r);
-                r.put("proposal",proposal);store.save(r,true);broadcast(code);return success(proposal);
+                JSONObject r=store.get(code);if(!r.isNull("proposal"))throw new ApiException(409,"Resolva a proposta pendente.");
+                JSONObject pData=req.json();JSONObject proposal=GameEngine.proposal(r,pData);
+                if("invalid".equals(proposal.getJSONObject("validation").getString("status"))||proposal.getJSONObject("validation").getJSONArray("blockers").length()>0)
+                    throw new ApiException(422,proposal.getJSONObject("validation").toString());
+                r.put("proposal",proposal);r.put("decision",JSONObject.NULL);store.save(r,true);broadcast(code);return success(proposal);
             }
         }
         if (method.equals("POST") && rest.equals("/automa/propose")) {
@@ -344,54 +363,94 @@ final class LanServer {
                 if(r.getJSONArray("actions").length()==0)throw new ApiException(409,"Cadastre pelo menos uma ação.");
                 snapshot=new JSONObject(r.toString());cards=new JSONArray(store.privateCards(code).toString());
             }
-            JSONObject proposalData;
-            if (!ai.enabled()) throw new ApiException(409,"Configure a IA no celular controlador ou use Escolher manualmente.");
-            proposalData=ai.propose(snapshot,cards);
-            if(cards.length()>0) {
-                // Never publish any generated prose derived from private cards: only the chosen public action name.
-                String name=proposalData.optString("action");JSONArray actions=snapshot.getJSONArray("actions");
-                for(int i=0;i<actions.length();i++){
-                    JSONObject action=actions.getJSONObject(i);
-                    if(name.equals(action.optString("name"))) {
-                        proposalData.put("reason","Ação escolhida considerando o estado da partida e informações privadas não reveladas.");
-                        proposalData.put("spoken","Minha jogada é: "+name+".");
-                        JSONArray steps=new JSONArray();if(!action.optString("description").isEmpty())steps.put(action.optString("description"));
-                        proposalData.put("player_steps",steps);proposalData.put("state_changes",new JSONArray());
-                        proposalData.put("uncertainties",new JSONArray().put("Verifique se a ação é legal no estado atual."));
-                        break;
+            if(!ai.enabled())throw new ApiException(409,"Configure a IA ou use a entrada manual parametrizada.");
+            JSONObject proposal=null,decision=null;JSONArray errors=new JSONArray();
+            for(int attempt=0;attempt<3;attempt++) {
+                JSONObject answer=ai.propose(snapshot,cards,errors);
+                if(!"proposed".equals(answer.optString("status"))) {
+                    // No generated prose or arbitrary diagnostics from private context reaches LAN clients.
+                    JSONArray needed=new JSONArray(),input=answer.optJSONArray("needed_data");
+                    if(input!=null)for(int i=0;i<input.length();i++) {
+                        JSONObject n=input.getJSONObject(i);String id=n.optString("entity"),field=n.optString("field");
+                        if((id.isEmpty()||GameEngine.entity(GameEngine.state(snapshot),id)!=null)&&Arrays.asList("active_player","phase","substep","turn","entities","occupancy_known","quantity","level","type","location","group","calibration","photo_coverage","required_state","actions","parameters","source","destination").contains(field))needed.put(GameStore.obj("entity",id,"field",field));
+                    }
+                    String status=answer.optString("status");
+                    decision=GameStore.obj("status","needs_data".equals(status)?"needs_data":"analysis_error", "needed_data",needed,
+                        "message","no_legal_move".equals(status)?"IA alegou ausência de jogada; o aplicativo não possui busca exaustiva para comprová-la.":
+                        "needs_data".equals(status)?"Confirme os dados indicados no editor do estado; campos sem entidade referem-se ao estado ou cobertura da imagem.":"A análise não produziu uma jogada.");
+                    break;
+                }
+                if(cards.length()>0) {
+                    JSONObject definition=GameEngine.action(snapshot,answer.optString("action")),params=answer.optJSONObject("parameters");
+                    JSONArray defs=definition==null?new JSONArray():definition.optJSONArray("parameters");
+                    if(params!=null)for(java.util.Iterator<String> keys=params.keys();keys.hasNext();) {
+                        String key=keys.next();Object value=params.opt(key);boolean publicValue=!(value instanceof String)||GameEngine.entity(GameEngine.state(snapshot),String.valueOf(value))!=null;
+                        if(defs!=null)for(int i=0;i<defs.length();i++){JSONObject d=defs.getJSONObject(i);if(key.equals(d.optString("name"))&&GameEngine.contains(d.optJSONArray("values"),String.valueOf(value)))publicValue=true;}
+                        if(!publicValue)params.put(key,JSONObject.NULL);
                     }
                 }
+                proposal=GameEngine.proposal(snapshot,answer);JSONObject validation=proposal.getJSONObject("validation");
+                if(validation.getJSONArray("blockers").length()>0) {
+                    decision=GameStore.obj("status","needs_data","message","Dados essenciais ainda não confirmados. Corrija o estado público antes de decidir.","errors",validation.getJSONArray("blockers"));proposal=null;break;
+                }
+                if(!"invalid".equals(validation.getString("status")))break;
+                errors=validation.getJSONArray("errors");proposal=null;
             }
+            if(proposal==null&&decision==null)decision=GameStore.obj("status","validation_error","errors",errors,"message","Proposta rejeitada após três tentativas. Corrija os dados ou a definição da ação.");
+            if(proposal!=null&&cards.length()>0)proposal.put("reason","Decisão baseada no estado público e na memória privada, sem divulgar seu conteúdo.");
             synchronized(store) {
                 JSONObject r=store.get(code);
-                if (r.optInt("revision")!=revision || !r.isNull("proposal")) throw new ApiException(409,"O estado mudou durante a sugestão.");
-                JSONObject proposal=validateProposal(proposalData,r);
-                r.put("proposal",proposal);store.save(r,true);broadcast(code);return success(proposal);
+                if(r.optInt("revision")!=revision||!r.isNull("proposal"))throw new ApiException(409,"Estado mudou durante a sugestão.");
+                r.put("proposal",proposal==null?JSONObject.NULL:proposal);r.put("decision",decision==null?JSONObject.NULL:decision);
+                store.save(r,true);broadcast(code);return success(proposal==null?decision:proposal);
             }
         }
         if (method.equals("POST") && rest.equals("/automa/reject")) {
             synchronized(store) {
-                JSONObject r=store.get(code);r.put("proposal",JSONObject.NULL);store.save(r,true);broadcast(code);
-                return success(store.publicRoom(r));
+                JSONObject r=store.get(code);JSONObject pData=r.optJSONObject("proposal");
+                if(pData!=null&&!pData.optString("id").equals(req.json().optString("proposal_id")))throw new ApiException(409,"Proposta mudou.");
+                r.put("proposal",JSONObject.NULL);r.put("decision",JSONObject.NULL);store.save(r,true);broadcast(code);return success(store.publicRoom(r));
             }
         }
         if (method.equals("POST") && rest.equals("/automa/confirm")) {
+            JSONObject body=req.json();
             synchronized(store) {
                 JSONObject r=store.get(code);JSONObject proposal=r.optJSONObject("proposal");
-                if(proposal==null)throw new ApiException(409,"Nenhuma jogada pendente.");
-                JSONArray changes=proposal.optJSONArray("state_changes");JSONObject vars=r.getJSONObject("variables");
-                if(changes!=null) for(int i=0;i<changes.length();i++) {
-                    JSONObject entry=changes.optJSONObject(i);if(entry!=null && !entry.optString("key").isEmpty())
-                        vars.put(entry.getString("key"),entry.optString("value"));
-                }
-                JSONArray history=r.getJSONArray("history");
-                history.put(GameStore.obj("turn",r.optInt("turn"),"action",proposal.optString("action"),
-                    "reason",proposal.optString("reason"),"spoken",proposal.optString("spoken"),
-                    "player_steps",proposal.optJSONArray("player_steps"),"at",GameStore.now()));
-                if(history.length()>100){JSONArray trimmed=new JSONArray();for(int i=history.length()-100;i<history.length();i++) trimmed.put(history.get(i));r.put("history",trimmed);}
+                if(proposal==null||!proposal.optString("id").equals(body.optString("proposal_id")))throw new ApiException(409,"Proposta ausente ou alterada.");
+                JSONObject validation=GameEngine.validate(r,proposal);validation.remove("simulated");proposal.put("validation",validation);
+                if("invalid".equals(validation.optString("status")))throw new ApiException(422,validation.toString());
+                if("unverifiable".equals(validation.optString("status"))&&!body.optBoolean("acknowledge_unverified"))throw new ApiException(422,"Revise as restrições não verificáveis e confirme explicitamente.");
+                proposal.put("execution_status","approved");proposal.put("approved_at",GameStore.now());
                 r.put("last_announcement",GameStore.obj("id",proposal.optString("id"),"text",proposal.optString("spoken")));
-                r.put("turn",r.optInt("turn")+1);r.put("proposal",JSONObject.NULL);
                 store.save(r,true);broadcast(code);return success(store.publicRoom(r));
+            }
+        }
+        if (method.equals("POST") && rest.equals("/automa/executed")) {
+            JSONObject body=req.json();
+            synchronized(store) {
+                JSONObject r=store.get(code),proposal=r.optJSONObject("proposal");
+                if(proposal==null||!proposal.optString("id").equals(body.optString("proposal_id"))||!"approved".equals(proposal.optString("execution_status")))throw new ApiException(409,"Aprove a proposta atual primeiro.");
+                JSONObject full=GameEngine.validate(r,proposal);
+                if("invalid".equals(full.optString("status")))throw new ApiException(409,full.toString());
+                int count=body.optInt("completed_moves",-1),total=proposal.getJSONArray("moves").length();
+                if(count<0||count>total)throw new ApiException(422,"Informe quantos movimentos iniciais foram executados, de 0 a "+total+".");
+                JSONObject next=full.getJSONObject("simulated");
+                if(count<total) {
+                    // A prefix changes physical state but does not apply end-of-action effects or total quotas.
+                    JSONObject partialRoom=GameEngine.copy(r),partial=GameEngine.copy(proposal),a=GameEngine.action(partialRoom,proposal.optString("action"));
+                    a.put("min_moves",0);a.put("effects",new JSONArray());JSONArray cs=new JSONArray(),original=a.optJSONArray("constraints");
+                    if(original!=null)for(int i=0;i<original.length();i++){JSONObject c=original.getJSONObject(i);if(!Arrays.asList("min_quantity","max_quantity").contains(c.optString("kind")))cs.put(c);}
+                    a.put("constraints",cs);JSONArray prefix=new JSONArray();for(int i=0;i<count;i++)prefix.put(proposal.getJSONArray("moves").get(i));partial.put("moves",prefix);
+                    next=count==0?GameEngine.copy(GameEngine.state(r)):GameEngine.validate(partialRoom,partial).getJSONObject("simulated");
+                }
+                // Physical execution is reported by a person, not inferred from approval or camera silence.
+                JSONArray entities=next.getJSONArray("entities");for(int i=0;i<entities.length();i++) {
+                    JSONObject e=entities.getJSONObject(i);e.put("human_locked",true);if(GameEngine.known(e)){e.put("status","confirmed");e.put("source","human_execution");}
+                }
+                next.put("version",GameEngine.state(r).getInt("version")+1);r.put("game_state",next);r.put("phase",next.optString("phase"));r.put("turn",next.optInt("turn",1));
+                JSONObject history=GameEngine.copy(proposal);history.put("completed_moves",count);history.put("execution_status",count==total?"executed":"partial");history.put("at",GameStore.now());history.put("turn",r.optInt("turn"));
+                JSONArray all=r.getJSONArray("history");all.put(history);if(all.length()>100){JSONArray trim=new JSONArray();for(int i=all.length()-100;i<all.length();i++)trim.put(all.get(i));r.put("history",trim);}
+                r.put("proposal",JSONObject.NULL);r.put("decision",JSONObject.NULL);r.put("board_frozen",false);store.save(r,true);broadcast(code);return success(store.publicRoom(r));
             }
         }
         throw new ApiException(404,"Rota não encontrada.");
@@ -407,41 +466,14 @@ final class LanServer {
         }
         return files;
     }
-    private static JSONArray normalizeActions(JSONArray source) {
-        JSONArray out=new JSONArray();
-        if(source==null)return out;
+    private static JSONArray normalizeActions(JSONArray source) throws Exception {
+        JSONArray out=new JSONArray();if(source==null)return out;java.util.Set<String> names=new java.util.HashSet<>();
         for(int i=0;i<source.length();i++) {
-            JSONObject action=source.optJSONObject(i);if(action==null)throw new IllegalArgumentException("Ação inválida.");
-            String name=action.optString("name").trim();
-            if(name.isEmpty())throw new IllegalArgumentException("Ação sem nome.");
-            out.put(GameStore.obj("name",name,"description",action.optString("description"),
-                "precondition",action.optString("precondition")));
-        }
-        return out;
-    }
-    private static JSONObject validateProposal(JSONObject proposal,JSONObject room) throws Exception {
-        String name=proposal.optString("action");boolean legal=false;
-        JSONArray actions=room.getJSONArray("actions");for(int i=0;i<actions.length();i++) {
-            if(name.equals(actions.getJSONObject(i).optString("name"))) {legal=true;break;}
-        }
-        if(!legal)throw new ApiException(422,"Ação não cadastrada na lista de ações permitidas.");
-        JSONArray steps=boundedArray(proposal.optJSONArray("player_steps"),30,500);
-        JSONArray uncertainties=boundedArray(proposal.optJSONArray("uncertainties"),30,500);
-        JSONArray changes=new JSONArray();JSONArray source=proposal.optJSONArray("state_changes");
-        if(source!=null)for(int i=0;i<Math.min(source.length(),30);i++) {
-            JSONObject entry=source.optJSONObject(i);if(entry!=null) changes.put(GameStore.obj("key",GameStore.clip(entry.optString("key"),100),
-                "value",GameStore.clip(entry.optString("value"),1000)));
-        }
-        String confidence=proposal.optString("confidence","baixa");
-        if(!Arrays.asList("baixa","media","alta").contains(confidence))confidence="baixa";
-        return GameStore.obj("id",UUID.randomUUID().toString(),"action",name,
-            "reason",GameStore.clip(proposal.optString("reason"),4000),"spoken",GameStore.clip(proposal.optString("spoken"),2500),
-            "player_steps",steps,"state_changes",changes,"uncertainties",uncertainties,"confidence",confidence);
-    }
-    private static JSONArray boundedArray(JSONArray input,int limit,int chars) {
-        JSONArray result=new JSONArray();if(input==null)return result;
-        for(int i=0;i<Math.min(limit,input.length());i++)result.put(GameStore.clip(input.optString(i),chars));
-        return result;
+            JSONObject action=source.getJSONObject(i);String name=action.optString("name").trim();
+            if(name.isEmpty()||!names.add(name))throw new ApiException(422,"Ação sem nome ou duplicada.");
+            // Preserve all reviewed definitions; legacy three-field actions load as unverified.
+            JSONObject normalized=GameEngine.copy(action);normalized.put("name",name);out.put(normalized);
+        }return out;
     }
 
     private static int locate(byte[] haystack,byte[] needle,int from) {

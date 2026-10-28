@@ -15,7 +15,7 @@
   </header>
   <main>
     <section id="landing" class="landing">
-      <div class="hero-label">VERSÃO 0.2 ALPHA · ANDROID LOCAL</div>
+      <div class="hero-label">VERSÃO 0.4 ALPHA · ANDROID LOCAL</div>
       <h1>Seu tabuleiro.<br><em>Um novo adversário.</em></h1>
       <p>Use o celular no tripé para observar o tabuleiro, outro como controlador e, opcionalmente, um leitor privado de cartas. Configure qualquer jogo a partir do manual ou manualmente, sem catálogo obrigatório.</p>
       <div class="landing-grid">
@@ -75,9 +75,9 @@
                   <label for="editRules">Regras e referências (editáveis)</label><textarea id="editRules" rows="7" placeholder="Descreva objetivos, movimentos, restrições e pontuação."></textarea>
                   <label for="editSetup">Preparação</label><textarea id="editSetup" rows="2"></textarea>
                   <label for="editTurnFlow">Fluxo do turno</label><textarea id="editTurnFlow" rows="2"></textarea>
-                  <label for="editActions">Ações possíveis — uma por linha</label>
+                  <label for="editActions">Definições de ações (JSON; formato antigo também aceito)</label>
                   <textarea id="editActions" rows="5" placeholder="Mover peça | Move uma peça | Quando o movimento for permitido&#10;Comprar carta | Compra uma carta | Quando houver cartas disponíveis"></textarea>
-                  <div class="hint">Formato: nome | descrição | condição. A IA só poderá sugerir as ações cadastradas.</div>
+                  <div class="hint">Revise parâmetros, origens, destinos, restrições, efeitos e referências. reviewed=true indica revisão humana; validation_complete=true somente se todas as restrições necessárias estiverem representadas e implementadas. Ações antigas permanecem não verificadas.</div>
                   <label for="editUncertainties">Dúvidas e ambiguidades — uma por linha</label><textarea id="editUncertainties" rows="2"></textarea>
                   <label><input type="checkbox" id="rulesReviewed" required> Conferi as regras e as ambiguidades com o manual original.</label>
                   <button type="submit" class="primary">Salvar regras revisadas</button>
@@ -92,7 +92,8 @@
               <form id="manualProposalForm" class="stacked-form hidden">
                 <label for="manualAction">Ação</label><select id="manualAction"></select>
                 <label for="manualSpeech">O que a automa deve dizer/exibir</label><textarea id="manualSpeech" rows="2" placeholder="Vou mover minha peça para a próxima região."></textarea>
-                <label for="manualSteps">Instruções para movimentar os componentes — uma por linha</label><textarea id="manualSteps" rows="3" placeholder="Mova o marcador azul uma casa à frente."></textarea>
+                <label for="manualSteps">Movimentos parametrizados (JSON)</label><textarea id="manualSteps" rows="5" placeholder='[{"operation":"transfer","component":"L1","source":"G1","destination":"C1","quantity":1,"level":1,"choice_parameter":""}]'></textarea>
+                <label for="manualParameters">Parâmetros adicionais (JSON)</label><textarea id="manualParameters" rows="2">{}</textarea>
                 <button type="submit" class="primary">Revisar esta jogada</button>
               </form>
               <div id="proposalArea" class="proposal-empty">Nenhuma jogada pendente.</div>
@@ -108,6 +109,10 @@
             <article class="panel">
               <div class="section-head"><div><span class="eyebrow">VISÃO DO TABULEIRO</span><h2>Imagem atual</h2></div><span id="boardAge" class="chip">Aguardando foto</span></div>
               <div class="board-frame" id="boardFrame"><div id="boardPlaceholder">Conecte o celular do tripé na aba<br>“Câmera do tabuleiro”.</div><img id="boardImage" alt="Fotografia atual do tabuleiro" class="hidden"></div>
+              <p class="hint">Calibração: selecione uma casa no estado e toque na foto para marcar sua referência. Em hexágonos, defina topology=hex_axial no tabuleiro e q/r axiais nas casas, ou neighbors explícitos. Isto não detecta automaticamente a malha.</p>
+              <label for="calibrationPosition">Casa/posição para calibrar</label><select id="calibrationPosition"></select>
+              <div id="boardReferences" class="board-references" aria-label="Referências públicas do tabuleiro"></div>
+              <button id="freezeBoard" class="secondary full">Congelar foto para revisão</button>
               <button id="analyzeBoard" class="secondary full">Analisar imagem com IA</button>
               <div id="observationArea" class="hint padded-top">A análise visual é opcional e deve ser conferida.</div>
             </article>
@@ -117,8 +122,17 @@
                 <div class="two-cols"><div><label for="editTurn">Turno</label><input id="editTurn" type="number" min="1" value="1"></div><div><label for="editPhase">Fase</label><input id="editPhase" value="Preparação"></div></div>
                 <label for="editVariables">Variáveis — uma por linha</label><textarea id="editVariables" rows="4" placeholder="pontos_automa = 3&#10;recursos = 2"></textarea>
                 <label for="editNotes">Anotações visíveis do tabuleiro</label><textarea id="editNotes" rows="4" placeholder="Azul está na terceira posição... "></textarea>
-                <button type="submit" class="secondary full">Atualizar estado</button>
+                <button type="submit" class="secondary full">Atualizar anotações e fase</button>
               </form>
+              <details open><summary>Estado estruturado e correção manual</summary>
+                <p class="hint">Somente dados públicos. Edite entidades, lotes por tipo/quantidade/local, grupos, casas e níveis. Vazio exige occupancy_known=true; oclusão exige status=unknown. A revisão protege os dados de substituições visuais automáticas. IDs devem permanecer estáveis.</p>
+                <p id="stateVersion" class="hint"></p>
+                <div class="button-row"><select id="newEntityKind" aria-label="Tipo de entidade"><option value="board">Tabuleiro/área</option><option value="position">Casa/posição</option><option value="group">Grupo da oferta</option><option value="component">Componente/lote</option><option value="card">Carta pública</option><option value="resource">Recurso</option><option value="objective">Objetivo público</option></select><button id="addStateEntity" type="button" class="secondary">Adicionar entidade</button></div>
+                <textarea id="structuredState" rows="16" aria-label="Estado público em JSON" spellcheck="false"></textarea>
+                <button id="saveStructuredState" class="primary full">Confirmar estado corrigido</button>
+                <button id="reviewObservation" class="secondary full">Adicionar candidatos ao editor para revisão</button>
+                <p id="stateEditorHelp" class="hint">Candidatos não substituem entidades existentes. Conflitos devem ser corrigidos no editor antes de confirmar.</p>
+              </details>
               <div class="divider"></div><div class="statrow"><span>Cartas na memória privada</span><strong id="privateCount">0</strong></div>
               <button class="text-button danger" id="clearCards">Descartar todas as cartas privadas</button>
             </article>

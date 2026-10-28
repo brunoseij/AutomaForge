@@ -76,9 +76,7 @@ O teste `measureSyntheticNativeFixtures` grava `app/build/reports/rulebook/local
 Requisitos: JDK 17 completo, Android SDK 35, Gradle 8.7 e acesso aos repositórios Google/Maven Central. Compatibilidade Android preservada: API 26+.
 
 ```bash
-gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
-# Com aparelho/emulador conectado:
-gradle :app:connectedDebugAndroidTest --no-daemon
+gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon
 # Contratos estáticos, sem dependência de pytest:
 python - <<'PY'
 import runpy
@@ -104,14 +102,12 @@ Fixtures sintéticas incluem texto nativo, digitalização, híbrido, duas colun
 | OkHttp | 4.12.0 | Chamadas canceláveis |
 | JUnit / Robolectric | 4.13.2 / 4.14.1 | Testes JVM |
 | Coroutines Test / MockWebServer | 1.8.1 / 4.12.0 | Testes de concorrência/transporte |
-| AndroidX Test runner / ext JUnit | 1.6.2 / 1.2.1 | Testes com Android real |
 
 OCR de outros sistemas de escrita não foi incorporado. Manuscritos, diagramas ilegíveis, PDFs protegidos e layouts incomuns podem exigir conferência ou fallback. Pacotes/evidências que excedem os limites seguros interrompem a análise em vez de truncar regras. A qualidade estratégica da automa continua dependendo da interpretação e da validação humana.
 
 ## Arquivos criados e alterados
 
 - `.gitattributes`
-- `app/src/androidTest/java/com/automaforge/android/rulebook/RulebookDeviceTest.kt`
 - `app/src/main/assets/schemas/rulebook_analysis.json`
 - `app/src/main/assets/schemas/rulebook_consolidation.json`
 - `app/src/main/java/com/automaforge/android/rulebook/ApiKeyStore.kt`

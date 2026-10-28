@@ -50,6 +50,7 @@ final class GameStore {
             "rules_draft", JSONObject.NULL, "turn", 1, "phase", "Preparação", "variables", new JSONObject(),
             "board_notes", "", "board_observation", JSONObject.NULL, "board_version", 0,
             "proposal", JSONObject.NULL, "history", new JSONArray(), "last_announcement", JSONObject.NULL);
+        GameEngine.state(room);
         cache.put(code, room);
         privateCards.put(code, new JSONArray());
         save(room, false);
@@ -64,6 +65,7 @@ final class GameStore {
         File file = new File(data, code + ".json");
         if (!file.isFile()) throw new ApiException(404, "Sala não encontrada.");
         loaded = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+        GameEngine.state(loaded);
         cache.put(code, loaded);
         // Private memory intentionally does NOT survive app restart.
         privateCards.put(code, new JSONArray());

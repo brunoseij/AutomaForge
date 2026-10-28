@@ -85,7 +85,10 @@ final class AiClient {
                 for (int j=0; j<blocks.length(); j++) {
                     JSONObject block = blocks.optJSONObject(j);
                     if (block != null && "output_text".equals(block.optString("type"))) {
-                        return new JSONObject(block.optString("text"));
+                        try {
+                            JSONObject value=new JSONObject(block.optString("text"));
+                            RuleJsonValidator.INSTANCE.validate(value,schema(schema));return value;
+                        } catch(Exception e) { throw new ApiException(502,"Resposta da IA fora do esquema esperado; análise não concluída."); }
                     }
                 }
             }
@@ -98,8 +101,8 @@ final class AiClient {
     }
 
     JSONObject board(JSONObject room, byte[] photo) throws Exception {
-        String state = GameStore.obj("turn", room.optInt("turn"), "phase", room.optString("phase"),
-            "variables", room.optJSONObject("variables")).toString();
+        String state = GameStore.obj("game_state", GameEngine.state(room), "board_version", room.optInt("board_version"),
+            "photo_at", room.optString("photo_at"), "photo_state_version", room.optInt("photo_state_version",-1)).toString();
         return ask(AiPrompts.board(room.optString("rules_text"), state), "board",
             java.util.Collections.singletonList(RuleFile.image(photo)));
     }
@@ -109,7 +112,7 @@ final class AiClient {
             java.util.Collections.singletonList(RuleFile.image(photo)));
     }
 
-    JSONObject propose(JSONObject room, JSONArray privateCards) throws Exception {
+    JSONObject propose(JSONObject room, JSONArray privateCards, JSONArray errors) throws Exception {
         JSONObject context = GameStore.obj(
             "game_name", room.optString("game_name"),
             "rules_text", room.optString("rules_text"),
@@ -122,8 +125,19 @@ final class AiClient {
             "variables", room.optJSONObject("variables"),
             "board_notes", room.optString("board_notes"),
             "recent_history", tail(room.optJSONArray("history"), 8));
+        context.put("game_state",GameEngine.state(room));
+        context.put("rules_revision",room.optInt("rules_revision"));
+        context.put("observation",room.optJSONObject("board_observation"));
+        context.put("repair_errors",errors);
         context.put("private_cards_ONLY_FOR_AI", privateCards);
-        return ask(AiPrompts.proposal(context.toString()), "proposal", null);
+        if(context.toString().length()>180000)throw new ApiException(422,"Contexto grande demais; reduza a etapa sem descartar dados necessários.");
+        JSONObject answer=ask(AiPrompts.proposal(context.toString()), "proposal", null);
+        JSONArray entries=answer.optJSONArray("parameters");JSONObject params=new JSONObject();
+        if(entries!=null)for(int i=0;i<entries.length();i++) {
+            JSONObject entry=entries.getJSONObject(i);String name=entry.getString("name");
+            if(params.has(name))throw new ApiException(422,"IA repetiu um parâmetro.");params.put(name,entry.get("value"));
+        }
+        answer.put("parameters",params);return answer;
     }
 
     private static JSONArray tail(JSONArray all, int count) {

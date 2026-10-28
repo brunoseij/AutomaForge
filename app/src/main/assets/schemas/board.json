@@ -1,1 +1,168 @@
-{"type": "object", "properties": {"observations": {"type": "array", "items": {"type": "string"}}, "possible_changes": {"type": "array", "items": {"type": "string"}}, "uncertainties": {"type": "array", "items": {"type": "string"}}}, "required": ["observations", "possible_changes", "uncertainties"], "additionalProperties": false}
+{
+  "type": "object",
+  "properties": {
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "board",
+              "position",
+              "group",
+              "component",
+              "resource",
+              "card",
+              "objective",
+              "region"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public"
+            ]
+          },
+          "location": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "identity": {
+            "type": "string",
+            "enum": [
+              "pooled",
+              "distinct",
+              "not_applicable"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "inferred",
+              "unknown"
+            ]
+          },
+          "occupancy_known": {
+            "type": "boolean"
+          },
+          "topology": {
+            "type": "string",
+            "enum": [
+              "hex_axial",
+              "graph",
+              "none"
+            ]
+          },
+          "q": {
+            "type": "integer"
+          },
+          "r": {
+            "type": "integer"
+          },
+          "neighbors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "region": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "type",
+          "owner",
+          "visibility",
+          "location",
+          "group",
+          "quantity",
+          "level",
+          "identity",
+          "status",
+          "occupancy_known",
+          "topology",
+          "q",
+          "r",
+          "neighbors",
+          "x",
+          "y",
+          "region",
+          "attributes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sufficient": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "observations",
+    "entities",
+    "uncertainties",
+    "sufficient"
+  ],
+  "additionalProperties": false
+}

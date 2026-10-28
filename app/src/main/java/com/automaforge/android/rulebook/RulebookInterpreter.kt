@@ -97,7 +97,7 @@ class RulebookInterpreter(private val cache: RulebookCacheRepository,
         val remaining=requestedVisuals.filter { it !in lookedAt }
         if(remaining.isNotEmpty())error("Ainda há ${remaining.size} elementos solicitados sem análise após três rodadas. Retome ou use o fallback; manual incompleto.")
         update("Consolidação de regras e referências")
-        val prompt="Consolide regras de $name usando SOMENTE as evidências. Não invente e não elimine exceções, prioridades, condições, restrições, " +
+        val prompt=AiPrompts.ACTION_DEFINITIONS+"Consolide regras de $name usando SOMENTE as evidências. Não invente e não elimine exceções, prioridades, condições, restrições, " +
             "números ou referências. Inclua preparação, fases, turnos, ações e pré-condições, decisões, vitória/derrota e informação necessária. " +
             "Sem modo solo explícito, marque emulação como hipótese. Em rules_text preserve todas as regras necessárias; cite as fontes originais. " +
             "Em evidence mantenha referências. covered_sources deve listar TODAS as fontes efetivamente consideradas, sem criar identificadores. " +
@@ -125,7 +125,7 @@ class RulebookInterpreter(private val cache: RulebookCacheRepository,
         require(files.sumOf { it.length() }<=20L*1024*1024) { "Fallback limitado a 20 MB por pacote. Divida os arquivos ou use o processamento local." }
         documentIds=files.map { file -> cache.hash(file).also { cache.preserve(file,it) } }
         metrics.originalPdfBytes=files.sumOf { it.length() }
-        val prompt="Interprete o manual de $name. Preserve condições, exceções, prioridades, números, ações, preparação, turnos, vitória e derrota. " +
+        val prompt=AiPrompts.ACTION_DEFINITIONS+"Interprete o manual de $name. Preserve condições, exceções, prioridades, números, ações, preparação, turnos, vitória e derrota. " +
             "Não invente regras. Identifique fontes por nome do arquivo e página em evidence e covered_sources. " +
             "Registre toda lacuna em uncertainties e unresolved. Este é o fallback original e exige conferência humana."
         val result=ask(prompt,"rulebook_consolidation",files.mapIndexed { i,f -> "manual-${i+1}."+f.extension to f },true)

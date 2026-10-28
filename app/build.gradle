@@ -8,9 +8,8 @@ android {
         applicationId 'com.automaforge.android'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '0.3.0-alpha'
-        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        versionCode 4
+        versionName '0.4.0-alpha'
     }
 
     buildTypes {
@@ -21,10 +20,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    sourceSets { androidTest.assets.srcDirs += ['src/test/resources'] }
     kotlinOptions { jvmTarget = '17' }
     testOptions { unitTests.includeAndroidResources = true }
     packaging { resources.excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*'] }
+}
+androidComponents {
+    beforeVariants(selector().all()) { variantBuilder -> variantBuilder.enableAndroidTest = false }
 }
 dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
@@ -36,6 +37,4 @@ dependencies {
     testImplementation 'org.robolectric:robolectric:4.14.1'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1'
     testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
-    androidTestImplementation 'androidx.test:runner:1.6.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }

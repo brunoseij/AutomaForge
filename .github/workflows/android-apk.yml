@@ -42,5 +42,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rulebook-test-reports
+          name: jvm-test-reports
           path: app/build/reports/tests/

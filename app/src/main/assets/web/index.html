@@ -11,11 +11,11 @@
 <div class="app-shell">
   <header class="topbar">
     <a class="brand" href="/" aria-label="AutomaForge — início"><span class="brand-mark">A<span>✦</span></span> <span>Automa<span class="brand-accent">Forge</span></span></a>
-    <div class="topstatus"><span class="status-dot" id="statusDot"></span><span id="statusText">Conectando…</span></div>
+    <div class="topstatus"><span id="runtimeVersion" class="chip">Interface 0.8</span><span class="status-dot" id="statusDot"></span><span id="statusText">Conectando…</span></div>
   </header>
   <main>
     <section id="landing" class="landing">
-      <div class="hero-label">VERSÃO 0.4 ALPHA · ANDROID LOCAL</div>
+      <div class="hero-label">VERSÃO 0.8 ALPHA · ANDROID LOCAL</div>
       <h1>Seu tabuleiro.<br><em>Um novo adversário.</em></h1>
       <p>Use o celular no tripé para observar o tabuleiro, outro como controlador e, opcionalmente, um leitor privado de cartas. Configure qualquer jogo a partir do manual ou manualmente, sem catálogo obrigatório.</p>
       <div class="landing-grid">
@@ -38,7 +38,7 @@
     <section id="workspace" class="workspace hidden">
       <div class="workspace-head">
         <div><div class="eyebrow">PARTIDA ATIVA</div><h1 id="roomTitle">Jogo</h1><div class="room-meta">Sala <strong id="roomCode"></strong> · Turno <strong id="roomTurn">1</strong></div></div>
-        <div class="head-actions"><button class="secondary small" id="copyLink">Copiar link</button><button class="secondary small" id="leaveRoom">Sair da sala</button></div>
+        <div class="head-actions"><button class="secondary small" id="openAiSettings">IA</button><button class="secondary small" id="copyLink">Copiar link</button><button class="secondary small" id="leaveRoom">Sair da sala</button></div>
       </div>
       <nav class="role-tabs" aria-label="Papel deste dispositivo">
         <button id="roleController" class="selected" data-role="controller">◈ Controlador</button>
@@ -46,17 +46,18 @@
         <button id="roleCards" data-role="cards">▤ Leitor privado</button>
       </nav>
       <div id="roleHelp" class="role-help"></div>
+      <section id="aiSettingsPanel" class="panel hidden"><h2>Configurar IA</h2><p id="aiSettingsMessage" class="hint"></p><form id="aiSettingsForm"><label for="aiModelSelect">Modelo OpenAI</label><select id="aiModelSelect" required></select><label for="aiReasoningSelect">Nível de raciocínio</label><select id="aiReasoningSelect" required></select><button type="submit" class="primary" id="saveAiModel">Salvar modelo e raciocínio</button></form><p class="hint">As escolhas valem para manual, câmera e jogadas. O menu mostra os níveis compatíveis; níveis maiores podem aumentar o tempo e o consumo. A disponibilidade do modelo depende da conta. A chave é configurada só no botão IA nativo do controlador.</p></section>
 
       <div id="controllerPane" class="pane">
         <div class="dashboard-grid">
           <div class="main-column">
             <article class="panel">
-              <div class="section-head"><div><span class="eyebrow">01 · PREPARAÇÃO</span><h2>Configurar regras</h2></div><span class="chip" id="rulesChip">Sem regras</span></div>
+              <div class="section-head"><div><span class="eyebrow">01 · MANUAL</span><h2>Configurar regras</h2></div><span class="chip" id="rulesChip">Sem regras</span></div>
               <div class="divider"></div>
               <label for="rulePhotos">Livro de regras (PDF ou fotografias)</label>
               <input type="file" id="rulePhotos" accept="application/pdf,.pdf,image/*" multiple>
               <p class="hint">Envie o PDF do manual ou fotos legíveis. Você pode adicionar arquivos em etapas.</p>
-              <div class="button-row"><button id="uploadRules" class="secondary">Adicionar arquivos</button><button id="interpretRules" class="primary">Interpretar com IA</button></div>
+              <div class="button-row"><button id="uploadRules" class="secondary">Importar e interpretar</button><button id="interpretRules" class="primary">Interpretar com IA</button></div>
               <p class="tiny muted" id="rulesCount">0 arquivos carregados</p>
               <section class="notice" aria-label="Processamento do manual">
                 <p id="processingStage" role="status" aria-live="polite">Processamento local aguardando.</p>
@@ -64,12 +65,15 @@
                 <p id="processingDetails" class="hint"></p>
                 <p id="processingMetrics" class="tiny"></p>
                 <label><input type="checkbox" id="retryUncertain"> Confirmo repetir chamadas com resultado desconhecido (podem gerar nova cobrança)</label>
-                <label><input type="checkbox" id="originalFallback"> Usar fallback: enviar arquivos originais à OpenAI</label>
+                <label for="manualMode">Leitura do manual</label>
+                <select id="manualMode"><option value="pdf_lossless">PDF completo · otimização conservadora (padrão)</option><option value="pdf_balanced">PDF completo · reduzir imagens (pode perder detalhes)</option><option value="original">PDF original · preservar o arquivo</option><option value="selective_ocr">Método anterior · OCR e recuperação seletiva de imagens</option></select>
+                <p class="hint">PDF completo mantém texto, diagramas, ícones e exemplos juntos. A cópia otimizada só é usada se for menor. Reduzir bytes não garante reduzir tokens. O original é preservado; confira detalhes em manuais com letras/ícones pequenos.</p>
+                <label><input type="checkbox" id="originalFallback"> Fallback de envio direto dos originais, sem otimização</label>
                 <div class="button-row"><button id="cancelRules" class="secondary">Cancelar processamento</button><button id="deleteManuals" class="secondary">Apagar manuais e cache</button></div>
               </section>
               <div id="draftBox" class="notice hidden"></div>
-              <details id="manualRulesDetails" open>
-                <summary>Revisar ou escrever as regras</summary>
+              <details id="manualRulesDetails">
+                <summary>Conferir ou corrigir regras (opcional)</summary>
                 <form id="rulesForm" class="stacked-form">
                   <label for="editGame">Nome do jogo</label><input id="editGame" maxlength="100">
                   <label for="editRules">Regras e referências (editáveis)</label><textarea id="editRules" rows="7" placeholder="Descreva objetivos, movimentos, restrições e pontuação."></textarea>
@@ -85,10 +89,26 @@
               </details>
             </article>
 
+            <article class="panel"><details id="gameModelDetails"><summary>Conferir o que a IA identificou sobre este jogo (opcional)</summary><div id="gameModelPanel">
+              <div class="section-head"><div><span class="eyebrow">MODELO DO JOGO</span><h2>O que precisa ser observado</h2></div></div>
+              <p class="hint">As áreas e variáveis são identificadas a partir do manual e usadas automaticamente. Inferências ficam identificadas; você pode corrigir algo aqui. O manual não informa a disposição real das peças.</p>
+              <button id="discoverStateModel" class="secondary">Identificar dados deste jogo com IA</button>
+              <div id="stateModelPreview" class="hint"></div>
+              <label><input type="checkbox" id="stateModelReviewed"> Conferi áreas, variáveis, visibilidade e as ações parametrizadas propostas com as regras.</label>
+              <button id="approveStateModel" class="primary">Confirmar modelo do jogo</button>
+              <details><summary>Editar definições avançadas</summary><textarea id="stateModelJson" rows="12" aria-label="Definições avançadas do modelo em JSON"></textarea></details></div></details>
+            </article>
+            <article class="panel" id="questionsPanel">
+              <div class="section-head"><div><span class="eyebrow">ESCLARECIMENTOS</span><h2>Responda às dúvidas da IA</h2></div></div>
+              <p class="hint">As respostas desta área são públicas para a sala. Use “Não sei” se não conseguir confirmar; a IA deve manter a pendência. Dados privados continuam no leitor separado.</p>
+              <button id="refreshQuestions" class="secondary">Atualizar perguntas</button>
+              <div id="questionsArea" aria-live="polite"></div>
+              <div class="button-row"><button id="reanalyzeAnswers" class="secondary">Reanalisar foto com minhas respostas</button><button id="reconsiderRules" class="secondary">Reinterpretar manual com minhas respostas</button></div>
+            </article>
             <article class="panel">
               <div class="section-head"><div><span class="eyebrow">02 · TURNO</span><h2>Decisão da automa</h2></div><span class="chip accent" id="turnChip">Aguardando</span></div>
               <p class="hint">Toda jogada precisa de confirmação. A automa sugere; você executa o movimento com os componentes físicos.</p>
-              <div class="button-row"><button id="aiPropose" class="primary">✦ Sugerir jogada com IA</button><button id="toggleManual" class="secondary">Escolher manualmente</button></div>
+              <div class="button-row"><button id="aiPropose" class="primary">✦ Identificar e sugerir jogada para a automa</button><button id="toggleManual" class="secondary">Escolher manualmente</button></div>
               <form id="manualProposalForm" class="stacked-form hidden">
                 <label for="manualAction">Ação</label><select id="manualAction"></select>
                 <label for="manualSpeech">O que a automa deve dizer/exibir</label><textarea id="manualSpeech" rows="2" placeholder="Vou mover minha peça para a próxima região."></textarea>
@@ -96,6 +116,7 @@
                 <label for="manualParameters">Parâmetros adicionais (JSON)</label><textarea id="manualParameters" rows="2">{}</textarea>
                 <button type="submit" class="primary">Revisar esta jogada</button>
               </form>
+              <p id="assistProgress" class="notice hidden" role="status" aria-live="polite"></p><p id="selectedAiModel" class="hint"></p>
               <div id="proposalArea" class="proposal-empty">Nenhuma jogada pendente.</div>
               <div class="speech-row"><label class="switchline"><input type="checkbox" id="voiceEnabled"> <span>Falar as ações em voz alta</span></label><button id="repeatSpeech" class="text-button">Repetir última fala ↗</button></div>
             </article>
@@ -114,17 +135,26 @@
               <div id="boardReferences" class="board-references" aria-label="Referências públicas do tabuleiro"></div>
               <button id="freezeBoard" class="secondary full">Congelar foto para revisão</button>
               <button id="analyzeBoard" class="secondary full">Analisar imagem com IA</button>
+              <details id="recognitionReview"><summary>Corrigir áreas, peças e variáveis reconhecidas</summary><h3>Leitura atual</h3><p class="hint">Use os campos para corrigir dono, localização, grupo, quantidade e nível. Se houver correção humana anterior, ela aparece preservada. Confira antes de confirmar a leitura.</p><div id="recognitionTable"></div><button id="confirmRecognition" class="primary full">Confirmar correções</button></details>
               <div id="observationArea" class="hint padded-top">A análise visual é opcional e deve ser conferida.</div>
             </article>
             <article class="panel">
               <div class="section-head"><div><span class="eyebrow">ESTADO DA PARTIDA</span><h2>Dados conhecidos</h2></div></div>
-              <form id="stateForm" class="stacked-form">
+              <details id="correctStateDetails"><summary>Corrigir dados identificados pela IA</summary><form id="factsForm" class="stacked-form">
+                <label for="activePlayerInput">Jogador ativo (ID)</label><input id="activePlayerInput" placeholder="ID de quem joga agora">
+                <label for="automaPlayerInput">Jogador controlado pela automa (ID)</label><input id="automaPlayerInput" placeholder="ID que usará nas áreas da automa">
+                <label for="knowledgePhase">Fase atual</label><input id="knowledgePhase">
+                <label for="knowledgeSubstep">Subetapa atual</label><input id="knowledgeSubstep">
+                <div id="gameFieldsArea"></div>
+                <button type="submit" class="primary">Salvar informações confirmadas</button>
+              </form>
+              </details><details><summary>Anotações e variáveis legadas</summary><form id="stateForm" class="stacked-form">
                 <div class="two-cols"><div><label for="editTurn">Turno</label><input id="editTurn" type="number" min="1" value="1"></div><div><label for="editPhase">Fase</label><input id="editPhase" value="Preparação"></div></div>
                 <label for="editVariables">Variáveis — uma por linha</label><textarea id="editVariables" rows="4" placeholder="pontos_automa = 3&#10;recursos = 2"></textarea>
                 <label for="editNotes">Anotações visíveis do tabuleiro</label><textarea id="editNotes" rows="4" placeholder="Azul está na terceira posição... "></textarea>
                 <button type="submit" class="secondary full">Atualizar anotações e fase</button>
-              </form>
-              <details open><summary>Estado estruturado e correção manual</summary>
+              </form></details>
+              <details><summary>Editor avançado do estado (JSON)</summary>
                 <p class="hint">Somente dados públicos. Edite entidades, lotes por tipo/quantidade/local, grupos, casas e níveis. Vazio exige occupancy_known=true; oclusão exige status=unknown. A revisão protege os dados de substituições visuais automáticas. IDs devem permanecer estáveis.</p>
                 <p id="stateVersion" class="hint"></p>
                 <div class="button-row"><select id="newEntityKind" aria-label="Tipo de entidade"><option value="board">Tabuleiro/área</option><option value="position">Casa/posição</option><option value="group">Grupo da oferta</option><option value="component">Componente/lote</option><option value="card">Carta pública</option><option value="resource">Recurso</option><option value="objective">Objetivo público</option></select><button id="addStateEntity" type="button" class="secondary">Adicionar entidade</button></div>

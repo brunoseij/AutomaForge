@@ -1,0 +1,426 @@
+{
+  "type": "object",
+  "properties": {
+    "state_model": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "areas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "board",
+                  "region",
+                  "group"
+                ]
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "shared",
+                  "player"
+                ]
+              },
+              "topology": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "graph",
+                  "hex_axial"
+                ]
+              },
+              "visual_cues": {
+                "type": "string"
+              },
+              "required_for_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rule_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "visual_sources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "key",
+              "label",
+              "kind",
+              "scope",
+              "topology",
+              "visual_cues",
+              "required_for_actions",
+              "rule_refs",
+              "visual_sources"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "string",
+                  "integer",
+                  "number",
+                  "boolean",
+                  "enum",
+                  "entity_ref",
+                  "entity_list"
+                ]
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "game",
+                  "player",
+                  "area"
+                ]
+              },
+              "visibility": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "private"
+                ]
+              },
+              "description": {
+                "type": "string"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "observable": {
+                "type": "boolean"
+              },
+              "required_for_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "required_phases": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rule_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "changes_with_actions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "key",
+              "label",
+              "type",
+              "scope",
+              "visibility",
+              "description",
+              "options",
+              "observable",
+              "required_for_actions",
+              "required_phases",
+              "rule_refs",
+              "changes_with_actions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "visual_sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "summary",
+        "areas",
+        "fields",
+        "visual_sources",
+        "reviewed"
+      ],
+      "additionalProperties": false
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "rules",
+              "state",
+              "ownership"
+            ]
+          },
+          "entity": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "input_type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "integer",
+              "boolean",
+              "choice",
+              "entity"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "rule_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "prompt",
+          "scope",
+          "entity",
+          "field",
+          "input_type",
+          "options",
+          "required",
+          "rule_refs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "precondition": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "string",
+                    "integer",
+                    "boolean"
+                  ]
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "name",
+                "type",
+                "required",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "destinations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "select",
+                "transfer",
+                "choose"
+              ]
+            }
+          },
+          "min_moves": {
+            "type": "integer"
+          },
+          "max_moves": {
+            "type": "integer"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "player": {
+            "type": "string"
+          },
+          "required_state": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "rule_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reviewed": {
+            "type": "boolean"
+          },
+          "validation_complete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "precondition",
+          "parameters",
+          "sources",
+          "destinations",
+          "operations",
+          "min_moves",
+          "max_moves",
+          "phase",
+          "player",
+          "required_state",
+          "constraints",
+          "effects",
+          "rule_refs",
+          "reviewed",
+          "validation_complete"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "state_model",
+    "questions",
+    "actions"
+  ],
+  "additionalProperties": false
+}

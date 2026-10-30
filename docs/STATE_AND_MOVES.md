@@ -1,3 +1,5 @@
+> As definições e a simulação abaixo continuam válidas, mas a 0.5 acrescentou modelo por jogo, seletores semânticos, formulários e esclarecimentos. Veja [as mudanças](GAME_KNOWLEDGE_AND_PDF.md).
+
 # Estado e decisões concretas — 0.4
 
 ## Causas verificadas no código 0.3

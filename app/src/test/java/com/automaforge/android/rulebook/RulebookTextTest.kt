@@ -1,5 +1,9 @@
 package com.automaforge.android
 
+import com.automaforge.android.core.*
+import com.automaforge.android.data.ai.*
+import com.automaforge.android.data.rulebook.*
+
 import org.junit.Assert.*
 import org.junit.Test
 

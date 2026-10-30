@@ -1,4 +1,10 @@
 package com.automaforge.android;
+import com.automaforge.android.core.*;
+import com.automaforge.android.domain.game.*;
+import com.automaforge.android.data.ai.*;
+import com.automaforge.android.data.game.*;
+import com.automaforge.android.data.lan.*;
+import com.automaforge.android.data.rulebook.*;
 
 import org.json.*;
 import org.junit.*;
@@ -14,29 +20,30 @@ import org.robolectric.annotation.Config;
 public class GameEngineTest {
     JSONObject room,s,action;
     JSONObject entity(String id,String kind,String location,int qty,int level) {
-        return GameStore.obj("id",id,"kind",kind,"type",kind,"location",location,"group","","quantity",qty,"level",level,
+        return GameJson.obj("id",id,"kind",kind,"type",kind,"location",location,"group","","quantity",qty,"level",level,
             "status","confirmed","source","human","visibility","public","identity","pooled","occupancy_known",true);
     }
     @Before public void setup() throws Exception {
-        room=GameStore.obj("phase","placement","turn",1,"rules_revision",2,"proposal",JSONObject.NULL);
-        s=GameEngine.state(room);s.put("active_player","automa");s.put("phase","placement");s.put("substep","place");s.put("metadata_status","confirmed");
+        room=GameJson.obj("phase","placement","turn",1,"rules_revision",2,"proposal",JSONObject.NULL);
+        s=GameEngine.state(room);s.put("active_player","automa");s.put("phase","placement");s.put("substep","place");s.put("metadata_status","confirmed");s.put("automa_player","automa");s.put("facts",new JSONArray());
+        room.put("state_model",GameJson.obj("reviewed",true,"fields",new JSONArray(),"areas",new JSONArray()));
         s.put("entities",new JSONArray().put(entity("board","board","",0,0).put("topology","hex_axial"))
             .put(entity("offer","group","",0,0)).put(entity("A","position","board",0,0).put("q",0).put("r",0))
             .put(entity("B","position","board",0,0).put("q",1).put("r",0))
             .put(entity("C","position","board",0,0).put("q",1).put("r",1))
             .put(entity("lot","component","offer",3,0).put("group","offer")));
-        action=GameStore.obj("name","Place","reviewed",true,"validation_complete",true,"phase","placement","player","automa",
+        action=GameJson.obj("name","Place","reviewed",true,"validation_complete",true,"phase","placement","player","automa",
             "parameters",new JSONArray(),"sources",new JSONArray().put("offer").put("A").put("B"),"destinations",new JSONArray().put("A").put("B").put("C"),
             "operations",new JSONArray().put("transfer").put("select").put("choose"),"min_moves",1,"max_moves",10,
-            "required_state",new JSONArray().put("offer"),"constraints",new JSONArray().put(GameStore.obj("kind","max_height","value",3)),"effects",new JSONArray());
+            "required_state",new JSONArray().put("offer"),"constraints",new JSONArray().put(GameJson.obj("kind","max_height","value",3)),"effects",new JSONArray());
         room.put("actions",new JSONArray().put(action));
     }
     JSONObject move(String lot,String src,String dst,int level) {
-        return GameStore.obj("operation","transfer","component",lot,"source",src,"destination",dst,"quantity",1,"level",level,"choice_parameter","");
+        return GameJson.obj("operation","transfer","component",lot,"source",src,"destination",dst,"quantity",1,"level",level,"choice_parameter","");
     }
     JSONObject proposal(JSONObject... moves) throws Exception {
         JSONArray ms=new JSONArray();for(JSONObject m:moves)ms.put(m);
-        return GameStore.obj("id","test","status","proposed","state_id",s.getString("id"),"state_version",s.getInt("version"),"rules_revision",2,
+        return GameJson.obj("id","test","status","proposed","state_id",s.getString("id"),"state_version",s.getInt("version"),"rules_revision",2,
             "player","automa","phase","placement","substep","place","action","Place","parameters",new JSONObject(),"moves",ms,"reason","","needed_data",new JSONArray());
     }
     String status(JSONObject p) throws Exception {return GameEngine.validate(room,p).getString("status");}
@@ -56,7 +63,7 @@ public class GameEngineTest {
     }
     @Test public void genericIntentAndMissingParametersAreRejected() throws Exception {
         assertEquals("invalid",status(proposal()));
-        action.getJSONArray("parameters").put(GameStore.obj("name","choice","type","string","required",true,"values",new JSONArray().put("public")));
+        action.getJSONArray("parameters").put(GameJson.obj("name","choice","type","string","required",true,"values",new JSONArray().put("public")));
         assertEquals("invalid",status(proposal(move("lot","offer","A",1))));
     }
     @Test public void nonexistentPieceAndDestinationAreRejected() throws Exception {
@@ -78,7 +85,7 @@ public class GameEngineTest {
         assertEquals("unverifiable",status(proposal(move("lot","offer","A",1))));
     }
     @Test public void unsupportedRuleIsNotValidated() throws Exception {
-        action.getJSONArray("constraints").put(GameStore.obj("kind","custom_unimplemented","value",0));
+        action.getJSONArray("constraints").put(GameJson.obj("kind","custom_unimplemented","value",0));
         assertEquals("unverifiable",status(proposal(move("lot","offer","A",1))));
         action.put("validation_complete",false);assertEquals("unverifiable",status(proposal(move("lot","offer","A",1))));
     }
@@ -90,7 +97,7 @@ public class GameEngineTest {
         GameEngine.correct(room,GameEngine.copy(s));s=GameEngine.state(room);
         JSONObject original=GameEngine.copy(GameEngine.entity(s,"lot"));
         JSONObject candidate=GameEngine.copy(original).put("quantity",9).put("status","observed");
-        JSONObject o=GameEngine.observation(room,GameStore.obj("entities",new JSONArray().put(candidate),"sufficient",false),7);
+        JSONObject o=GameEngine.observation(room,GameJson.obj("entities",new JSONArray().put(candidate),"sufficient",false),7);
         assertTrue(o.getJSONArray("conflicts").length()>0);assertEquals(3,GameEngine.entity(s,"lot").getInt("quantity"));
         assertTrue(GameEngine.entity(s,"lot").getBoolean("human_locked"));
     }
@@ -108,7 +115,7 @@ public class GameEngineTest {
         assertEquals("invalid",status(proposal(move("lot","offer","A",1).put("quantity","1"))));
     }
     @Test public void selectedOnlyAndGroupConstraintsApplySequentially() throws Exception {
-        action.getJSONArray("constraints").put(GameStore.obj("kind","selected_only","value",0));
+        action.getJSONArray("constraints").put(GameJson.obj("kind","selected_only","value",0));
         assertEquals("invalid",status(proposal(move("lot","offer","A",1))));
         JSONObject select=move("lot","offer","",0).put("operation","select");
         assertEquals("valid",status(proposal(select,move("lot","offer","A",1))));
@@ -118,11 +125,11 @@ public class GameEngineTest {
         try {GameEngine.correct(room,s);fail();}catch(ApiException expected){assertEquals(422,expected.status);}
     }
     @Test public void genericChoiceIsNotConcreteEvenWithTextParameter() throws Exception {
-        action.getJSONArray("parameters").put(GameStore.obj("name","choice","type","string","required",true,"values",new JSONArray()));
+        action.getJSONArray("parameters").put(GameJson.obj("name","choice","type","string","required",true,"values",new JSONArray()));
         JSONObject choice=move("","","",0).put("operation","choose").put("choice_parameter","choice");
-        JSONObject p=proposal(choice).put("parameters",GameStore.obj("choice","escolher a melhor opção"));assertEquals("invalid",status(p));
+        JSONObject p=proposal(choice).put("parameters",GameJson.obj("choice","escolher a melhor opção"));assertEquals("invalid",status(p));
         action.getJSONArray("parameters").getJSONObject(0).getJSONArray("values").put("explicit_public_choice");
-        p.put("parameters",GameStore.obj("choice","explicit_public_choice"));assertEquals("valid",status(p));
+        p.put("parameters",GameJson.obj("choice","explicit_public_choice"));assertEquals("valid",status(p));
     }
     @Test public void malformedLocalContractReturnsInvalidInsteadOfThrowing() throws Exception {
         JSONObject p=proposal().put("moves",new JSONArray().put("generic instruction"));
@@ -141,7 +148,7 @@ public class GameEngineTest {
 
     @Test public void legacyRoomLoadsWithoutInventingOccupancyAndPersists() throws Exception {
         GameStore store=new GameStore(RuntimeEnvironment.getApplication());JSONObject created=store.create("legacy");
-        JSONObject old=store.get(created.getString("code"));old.remove("game_state");old.put("proposal",GameStore.obj("action","old generic"));store.save(old,false);
+        JSONObject old=store.get(created.getString("code"));old.remove("game_state");old.put("proposal",GameJson.obj("action","old generic"));store.save(old,false);
         GameStore reloaded=new GameStore(RuntimeEnvironment.getApplication());JSONObject loaded=reloaded.get(created.getString("code"));
         assertEquals(0,GameEngine.state(loaded).getJSONArray("entities").length());assertTrue(loaded.isNull("proposal"));
         assertEquals("unknown",GameEngine.state(loaded).getString("metadata_status"));

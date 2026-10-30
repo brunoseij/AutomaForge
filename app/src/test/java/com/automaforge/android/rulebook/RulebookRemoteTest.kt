@@ -1,5 +1,9 @@
 package com.automaforge.android
 
+import com.automaforge.android.core.*
+import com.automaforge.android.data.ai.*
+import com.automaforge.android.data.rulebook.*
+
 import com.google.gson.Gson
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
@@ -39,6 +43,7 @@ class RulebookRemoteTest {
         .put("facts",JSONArray().put(JSONObject().put("text","Move 3 spaces unless blocked; ties favor defender.").put("sources",JSONArray().put(source))))
         .put("requested_visual_ids",JSONArray(visuals)).put("requested_page_numbers",JSONArray(pages)).put("uncertainties",JSONArray())
     private fun finalRules()=JSONObject().put("game_name","Synthetic").put("rules_text","Move 3 spaces unless blocked; ties favor defender.")
+        .put("state_model",JSONObject().put("summary","Synthetic").put("areas",JSONArray()).put("fields",JSONArray()).put("visual_sources",JSONArray()).put("reviewed",false)).put("questions",JSONArray())
         .put("setup","Spend 2 energy.").put("turn_flow","Alternate.").put("actions",JSONArray()).put("uncertainties",JSONArray())
         .put("evidence",analysis().getJSONArray("facts")).put("unresolved",JSONArray()).put("covered_sources",JSONArray().put(source).put("$id:p1"))
     private fun doc(): RulebookDocument {
@@ -51,6 +56,41 @@ class RulebookRemoteTest {
         val fresh=OpenAiRulebookGateway(RuntimeEnvironment.getApplication(),OkHttpClient.Builder().retryOnConnectionFailure(false)
             .readTimeout(10,TimeUnit.SECONDS).build(),server.url("/v1/responses").toString()) { "test-key-only" }
         return RulebookInterpreter(cache,RulebookPipeline(RuntimeEnvironment.getApplication(),cache),fresh)
+    }
+    @Test fun fullPdfPacketIncludesTextAndImagesWithoutSelectiveOcr() = runBlocking {
+        val original=File(directory,"native.pdf").apply { this@RulebookRemoteTest.javaClass.getResourceAsStream("/manuals/native.pdf")!!.use { input -> outputStream().use { input.copyTo(it) } } }
+        val facts=JSONArray().put(JSONObject().put("text","Native text and page diagrams retained").put("sources",JSONArray().put("$id:p1")))
+        val reading=analysis().put("facts",facts)
+        val final=finalRules().put("evidence",facts).put("covered_sources",JSONArray().put("$id:p1").put("$id:p2"))
+        server.enqueue(response(reading));server.enqueue(response(final))
+        val metrics=RulebookMetrics(processingMode="pdf_lossless")
+        interpreter().withClarifications(JSONObject().put("human_answers",JSONArray().put(JSONObject().put("question","Which board?").put("value","area-1"))))
+            .interpretPdf("Synthetic",listOf(ManualPacket(id,1,2,original,true)),metrics,false){}
+        val first=JSONObject(server.takeRequest().body.readUtf8()).getJSONArray("input").getJSONObject(0).getJSONArray("content")
+        val files=(0 until first.length()).map { first.getJSONObject(it) }.filter { it.optString("type")=="input_file" }
+        assertEquals(1,files.size);assertEquals("high",files.single().getString("detail"))
+        assertArrayEquals(original.readBytes(),android.util.Base64.decode(files.single().getString("file_data").substringAfter(','),android.util.Base64.DEFAULT))
+        assertTrue(first.toString().contains("Which board?"));assertEquals(0,metrics.ocrPages);assertEquals(2,metrics.calls)
+    }
+    @Test fun customModelIsAcceptedAndTransmittedWithoutTheOldAllowlist()=runBlocking {
+        AiSettings(RuntimeEnvironment.getApplication()).saveModel("my-compatible-model")
+        val fresh=OpenAiRulebookGateway(RuntimeEnvironment.getApplication(),OkHttpClient.Builder().build(),server.url("/v1/responses").toString()) { "test-only" }
+        fresh.checkConfiguration();server.enqueue(response(analysis()))
+        fresh.send(fresh.requestBody("Synthetic","rulebook_analysis",emptyList()),"rulebook_analysis",0)
+        assertEquals("my-compatible-model",JSONObject(server.takeRequest().body.readUtf8()).getString("model"))
+    }
+    @Test fun chosenReasoningReachesManualRequestsAndChangesTheCacheInput()=runBlocking {
+        val settings=AiSettings(RuntimeEnvironment.getApplication());settings.save("gpt-5.4","high")
+        val high=OpenAiRulebookGateway(RuntimeEnvironment.getApplication(),OkHttpClient.Builder().build(),server.url("/v1/responses").toString()) { "test-only" }
+        val body=high.requestBody("Synthetic","rulebook_analysis",emptyList())
+        server.enqueue(response(analysis()));high.send(body,"rulebook_analysis",0)
+        assertEquals("high",JSONObject(server.takeRequest().body.readUtf8()).getJSONObject("reasoning").getString("effort"))
+        settings.save("gpt-5.4","low")
+        val low=OpenAiRulebookGateway(RuntimeEnvironment.getApplication())
+        assertNotEquals(body,low.requestBody("Synthetic","rulebook_analysis",emptyList()))
+        assertEquals("high",JSONObject(high.requestBody("Synthetic","rulebook_analysis",emptyList())).getJSONObject("reasoning").getString("effort"))
+        settings.save("gpt-4.1-mini","default")
+        assertFalse(JSONObject(OpenAiRulebookGateway(RuntimeEnvironment.getApplication()).requestBody("Synthetic","rulebook_analysis",emptyList())).has("reasoning"))
     }
     @Test fun textualPdfIsNotUploadedAndResponsesReused() = runBlocking {
         server.enqueue(response(analysis()));server.enqueue(response(finalRules()))

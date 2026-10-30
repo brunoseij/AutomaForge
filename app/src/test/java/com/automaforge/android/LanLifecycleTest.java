@@ -1,4 +1,10 @@
 package com.automaforge.android;
+import com.automaforge.android.core.*;
+import com.automaforge.android.domain.game.*;
+import com.automaforge.android.data.ai.*;
+import com.automaforge.android.data.game.*;
+import com.automaforge.android.data.lan.*;
+import com.automaforge.android.data.rulebook.*;
 
 import org.json.*;
 import org.junit.*;
@@ -27,7 +33,7 @@ public class LanLifecycleTest {
     }
     @After public void close() {server.stop();}
     JSONObject call(String method,String suffix,JSONObject body) throws Exception {
-        Class<?> reqClass=Class.forName("com.automaforge.android.LanServer$Request");
+        Class<?> reqClass=Class.forName("com.automaforge.android.data.lan.LanServer$Request");
         Constructor<?> constructor=reqClass.getDeclaredConstructor();constructor.setAccessible(true);Object req=constructor.newInstance();
         for(String key:new String[]{"method","path","body"}) {
             Field f=reqClass.getDeclaredField(key);f.setAccessible(true);
@@ -40,7 +46,7 @@ public class LanLifecycleTest {
         return new JSONObject(new String((byte[])bytes.get(response),StandardCharsets.UTF_8));
     }
     JSONObject propose() throws Exception {return call("POST","/automa/manual",draft);}
-    JSONObject approve(JSONObject p) throws Exception {return call("POST","/automa/confirm",GameStore.obj("proposal_id",p.getString("id")));}
+    JSONObject approve(JSONObject p) throws Exception {return call("POST","/automa/confirm",GameJson.obj("proposal_id",p.getString("id")));}
     @Test public void approvalDoesNotExecuteOrAdvanceTurn() throws Exception {
         JSONObject p=propose(),r=approve(p);
         assertEquals("approved",r.getJSONObject("proposal").getString("execution_status"));
@@ -48,25 +54,37 @@ public class LanLifecycleTest {
         assertEquals(0,r.getJSONObject("game_state").getInt("version"));assertEquals(1,r.getInt("turn"));
     }
     @Test public void executionRequiresApproval() throws Exception {
-        JSONObject p=propose();try{call("POST","/automa/executed",GameStore.obj("proposal_id",p.getString("id"),"completed_moves",2));fail();}
+        JSONObject p=propose();try{call("POST","/automa/executed",GameJson.obj("proposal_id",p.getString("id"),"completed_moves",2));fail();}
         catch(ApiException expected){assertEquals(409,expected.status);}
     }
     @Test public void partialExecutionCommitsOnlyPrefixAndInvalidatesRemainingPlan() throws Exception {
         JSONObject p=propose();approve(p);
-        JSONObject r=call("POST","/automa/executed",GameStore.obj("proposal_id",p.getString("id"),"completed_moves",1)),s=r.getJSONObject("game_state");
+        JSONObject r=call("POST","/automa/executed",GameJson.obj("proposal_id",p.getString("id"),"completed_moves",1)),s=r.getJSONObject("game_state");
         assertTrue(r.isNull("proposal"));assertEquals(1,s.getInt("version"));assertEquals(1,GameEngine.height(s,"A"));assertEquals(0,GameEngine.height(s,"B"));
         assertEquals(2,GameEngine.entity(s,"lot").getInt("quantity"));assertEquals("partial",r.getJSONArray("history").getJSONObject(0).getString("execution_status"));
     }
     @Test public void totalExecutionUsesSequentialStateAndPreservesTurnWithoutEffect() throws Exception {
         JSONObject p=propose();approve(p);
-        JSONObject r=call("POST","/automa/executed",GameStore.obj("proposal_id",p.getString("id"),"completed_moves",2));
+        JSONObject r=call("POST","/automa/executed",GameJson.obj("proposal_id",p.getString("id"),"completed_moves",2));
         assertEquals(1,GameEngine.height(r.getJSONObject("game_state"),"A"));assertEquals(1,GameEngine.height(r.getJSONObject("game_state"),"B"));assertEquals(1,r.getInt("turn"));
     }
     @Test public void correctionMakesPendingProposalUnapprovable() throws Exception {
         JSONObject p=propose(),s=call("GET","",null).getJSONObject("game_state");call("PUT","/state/structured",s);
         try{approve(p);fail();}catch(ApiException expected){assertEquals(422,expected.status);}
     }
+    @Test public void executionDoesNotConfirmUnrelatedVisualObservations() throws Exception {
+        GameStore store=new GameStore(RuntimeEnvironment.getApplication());JSONObject r=store.get(code);
+        GameEngine.entity(r.getJSONObject("game_state"),"board").put("status","observed").put("human_locked",false).put("source","image");store.save(r,false);
+        JSONObject p=propose();approve(p);JSONObject result=call("POST","/automa/executed",GameJson.obj("proposal_id",p.getString("id"),"completed_moves",2));
+        JSONObject board=GameEngine.entity(result.getJSONObject("game_state"),"board");assertEquals("observed",board.getString("status"));assertFalse(board.getBoolean("human_locked"));
+    }
     @Test public void genericManualIntentIsRejectedByExistingRoute() throws Exception {
         draft.put("moves",new JSONArray());try{propose();fail();}catch(ApiException expected){assertEquals(422,expected.status);}
+    }
+    @Test public void closedServerRejectsCommandsAndClearsPrivateMemory() throws Exception {
+        Field field=LanServer.class.getDeclaredField("store");field.setAccessible(true);GameStore store=(GameStore)field.get(server);
+        store.privateCards(code).put(GameJson.obj("secret","test-only-private-card"));
+        server.stop();assertEquals(0,store.privateCards(code).length());
+        try{call("GET","",null);fail();}catch(ApiException expected){assertEquals(409,expected.status);}
     }
 }

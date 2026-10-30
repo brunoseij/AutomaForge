@@ -1,3 +1,5 @@
+> A partir da 0.5, o modo padrão é PDF completo com otimização conservadora. Este documento descreve o pipeline anterior de OCR seletivo, agora opcional. Veja [o fluxo atual](GAME_KNOWLEDGE_AND_PDF.md).
+
 # Processamento local de manuais
 
 O controlador Android continua sendo o servidor HTTP/WebSocket da partida. A interface continua em HTML/JS dentro da WebView. O projeto original usa Java, `ServerSocket`, Camera2 e arquivos JSON privados, sem Compose, ViewModel, Room ou contêiner de injeção. Os novos componentes são Kotlin e usam Coroutines/StateFlow; não foi necessário substituir a arquitetura existente.

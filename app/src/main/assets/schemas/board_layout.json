@@ -1,0 +1,125 @@
+{
+  "type": "object",
+  "properties": {
+    "areas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "area_type": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "region": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "area_type",
+          "owner",
+          "region",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "rules",
+              "state",
+              "ownership"
+            ]
+          },
+          "entity": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "input_type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "integer",
+              "boolean",
+              "choice",
+              "entity"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "rule_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "prompt",
+          "scope",
+          "entity",
+          "field",
+          "input_type",
+          "options",
+          "required",
+          "rule_refs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "areas",
+    "questions",
+    "uncertainties"
+  ],
+  "additionalProperties": false
+}

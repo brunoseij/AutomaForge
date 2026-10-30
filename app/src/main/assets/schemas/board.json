@@ -121,6 +121,15 @@
               ],
               "additionalProperties": false
             }
+          },
+          "area_type": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "evidence": {
+            "type": "string"
           }
         },
         "required": [
@@ -143,7 +152,10 @@
           "x",
           "y",
           "region",
-          "attributes"
+          "attributes",
+          "area_type",
+          "confidence",
+          "evidence"
         ],
         "additionalProperties": false
       }
@@ -156,13 +168,199 @@
     },
     "sufficient": {
       "type": "boolean"
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "inferred",
+              "unknown"
+            ]
+          },
+          "region": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "subject",
+          "value",
+          "status",
+          "region",
+          "confidence",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "rules",
+              "state",
+              "ownership"
+            ]
+          },
+          "entity": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "input_type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "integer",
+              "boolean",
+              "choice",
+              "entity"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "rule_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "prompt",
+          "scope",
+          "entity",
+          "field",
+          "input_type",
+          "options",
+          "required",
+          "rule_refs"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "metadata": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "phase",
+              "substep",
+              "turn",
+              "active_player"
+            ]
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "inferred",
+              "unknown"
+            ]
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "value",
+          "status",
+          "confidence",
+          "evidence"
+        ]
+      }
     }
   },
   "required": [
     "observations",
     "entities",
     "uncertainties",
-    "sufficient"
+    "sufficient",
+    "facts",
+    "questions",
+    "metadata"
   ],
   "additionalProperties": false
 }
